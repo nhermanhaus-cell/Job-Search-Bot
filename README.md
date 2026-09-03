@@ -1,26 +1,25 @@
 # Job Hunt OS
 
-Personal job-hunt tool: search many role types, drop postings that demand too many years, tailor a resume per job (Enhancv-style ATS keywords + human approve), then apply without silent bots.
+Personal job-hunt tool: ingest one or more resumes, suggest and type job titles, stream listings **source by source** (clickable as they land), read each JD for hidden requirements, match like LinkedIn, suggest resume edits, then apply after you approve.
 
-**This repo is in the planning stage.** The implementation contract is [docs/PLAN.md](docs/PLAN.md).
+**Planning stage.** Implementation contract: [docs/PLAN.md](docs/PLAN.md).
 
 ## Why this exists
 
-LinkedIn and Indeed make it hard to explore several backgrounds at once and even harder to hide “8+ years / Staff / Principal” noise. Enhancv is good at matching a pasted JD to a resume, but it is not a hunt + apply queue. This app is meant to be the daily loop for both.
+Job boards make it hard to explore several backgrounds at once, to see every source at once, and to notice requirements buried in the prose. Enhancv is strong at keyword tailoring; this app is the daily hunt + match + edit + apply loop around that.
 
 ## What v1 will do
 
-- Multiple **search lenses** (interests / background explorations)
-- Job ingest from **official APIs** (Adzuna, USAJobs, public Greenhouse / Lever / Ashby boards) — not LinkedIn/Indeed scrapers
-- **Years and seniority filter** parsed from the job description
-- **ATS score + keyword gap** against your master resume
-- **Tasteful rewrite** from a fact inventory only; you accept, reject, or edit each change
-- **Approve-then-send**: export PDF and open the official apply page (optional ATS submit later)
+- **Intake** from multiple uploaded resumes → merged background, suggested titles, plus titles you type
+- **Wide sources** in parallel: Google-for-Jobs style (Indeed, LinkedIn, Glassdoor, ZipRecruiter), Adzuna, USAJobs, ATS boards (Greenhouse, Lever, Ashby, Workday, …), remote/startup/specialty boards, RSS, paste
+- **Progressive results:** loading icon + dropdown of sources still pulling; each job is a link as soon as that source returns
+- **Deep JD read** for hidden/implied requirements (years, visa, on-call, “remote” that is not remote, lead-without-the-title)
+- **LinkedIn-style match** with a why-line, not a mystery score
+- **Suggested edits** from the merged inventory; accept / reject / edit
+- **Approve-then-send** with the live listing URL always available
 
-## What it will not do
-
-Scrape or auto-click LinkedIn / Indeed Easy Apply. Those products ban unofficial bots and the applications are worse when a robot invents experience.
+Years filters and source toggles are preferences, not locks.
 
 ## Status
 
-Design only. Next step after this plan is approved: Phase 0 skeleton (paste a JD, score it, no job APIs yet).
+Design only. Next implementation step: Phase 0 — multi-resume intake, title suggestions, paste-a-JD match + edit suggestions.
