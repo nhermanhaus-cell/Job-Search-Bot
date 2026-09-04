@@ -3,6 +3,7 @@ import Foundation
 public actor APIClient {
     public var baseURL: URL
     private let sessionStore: KeychainSessionStore
+    private let urlSession: URLSession
 
     public init(
         baseURL: URL = APIClient.defaultBaseURL,
@@ -10,6 +11,12 @@ public actor APIClient {
     ) {
         self.baseURL = baseURL
         self.sessionStore = sessionStore
+        let config = URLSessionConfiguration.ephemeral
+        config.waitsForConnectivity = false
+        config.timeoutIntervalForRequest = 5
+        config.timeoutIntervalForResource = 8
+        config.requestCachePolicy = .reloadIgnoringLocalCacheData
+        self.urlSession = URLSession(configuration: config)
     }
 
     public static var defaultBaseURL: URL {
@@ -48,7 +55,7 @@ public actor APIClient {
         contentType: String? = nil
     ) async throws -> URLRequest {
         guard let session = try await sessionStore.load() else { throw AuthError.unauthenticated }
-        var request = URLRequest(url: url(path))
+        var request = URLRequest(url: url(path), timeoutInterval: 5)
         request.httpMethod = method
         request.httpBody = body
         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
@@ -57,7 +64,7 @@ public actor APIClient {
     }
 
     private func perform(_ request: URLRequest, retryOnUnauthorized: Bool = true) async throws -> Data {
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AuthError.invalidResponse }
         if http.statusCode == 401, retryOnUnauthorized {
             let session = try await refreshSession()
@@ -112,11 +119,11 @@ public actor APIClient {
         method: String = "POST",
         body: Body
     ) async throws -> T {
-        var request = URLRequest(url: url(path))
+        var request = URLRequest(url: url(path), timeoutInterval: 5)
         request.httpMethod = method
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw AuthError.invalidResponse }
         if http.statusCode == 404 { throw AuthError.accountNotFound }
         guard (200 ..< 300).contains(http.statusCode) else {
@@ -476,11 +483,11 @@ public actor APIClient {
             let task = Task {
                 do {
                     var request = try await self.authorizedRequest("/api/search/sessions/\(sessionId)/events")
-                    var (bytes, response) = try await URLSession.shared.bytes(for: request)
+                    var (bytes, response) = try await self.urlSession.bytes(for: request)
                     if let http = response as? HTTPURLResponse, http.statusCode == 401 {
                         let session = try await self.refreshSession()
                         request.setValue("Bearer \(session.accessToken)", forHTTPHeaderField: "Authorization")
-                        (bytes, response) = try await URLSession.shared.bytes(for: request)
+                        (bytes, response) = try await self.urlSession.bytes(for: request)
                     }
                     guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
                         throw URLError(.badServerResponse)

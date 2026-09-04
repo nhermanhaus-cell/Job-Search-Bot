@@ -11,7 +11,7 @@ public enum AppPhase: Equatable {
 
 @MainActor
 public final class AppStore: ObservableObject {
-    @Published public var phase: AppPhase = .bootstrapping
+    @Published public var phase: AppPhase = .unauthenticated
     @Published public var session: AuthSession?
     @Published public var profile: Profile?
     @Published public var jobs: [Job] = []
@@ -53,8 +53,8 @@ public final class AppStore: ObservableObject {
     }
 
     public func bootstrap() async {
-        phase = .bootstrapping
         do {
+            guard try await client.storedSession() != nil else { return }
             let session = try await client.validateStoredSession()
             apply(session: session)
             await refresh()
