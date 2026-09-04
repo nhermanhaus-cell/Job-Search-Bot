@@ -17,6 +17,7 @@ This repo is greenfield. This file is the implementation contract.
 | Difficulty | Every match is banded **easy / medium / reach** for charts and inbox filters |
 | Tailoring | Suggested edits from the merged inventory; you accept, reject, or rewrite |
 | Apply | Approve-then-send: official listing URL always; ATS / partner apply where the adapter can submit |
+| Mail | User-authorized **Gmail OAuth** on our backend; classify threads into applied / rejection / interview / screen / offer. OpenAI classifies mail we already fetched — it does **not** inherit ChatGPT’s Gmail connection |
 
 Years/seniority caps, source toggles, and template style are **user preferences**, not product locks. Filters default on and can be turned off per search.
 
@@ -340,7 +341,67 @@ flowchart LR
 - Every job always has the **live listing link** (from the streaming search).
 - After approval, the apply adapter for that host runs if we have one (Greenhouse job-board POST, other ATS apply endpoints, partner apply APIs). Otherwise the listing opens with the packet downloaded.
 - Custom screening questions: show them on the job page when the provider exposes them; you answer before Approve.
-- Tracker: queued → opened → submitted → interview → closed.
+- Tracker: queued → opened → submitted → interview → closed. Gmail (below) can move these automatically when you confirm or when confidence is high.
+
+## Gmail (and Calendar) status sync
+
+Yes — the backend can watch the inbox you authorize and update the tracker: application received, rejection, recruiter screen, interview request, time proposed, offer, ghost follow-up. The Swift app does not read Gmail directly.
+
+### What does **not** work: “use my ChatGPT Gmail hookup”
+
+ChatGPT’s Gmail connector and an OpenAI API key are **not** the same login.
+
+- Connecting Gmail inside ChatGPT stays inside ChatGPT. Our app cannot see that token.
+- OpenAI’s Responses API *does* have `connector_gmail` / `connector_googlecalendar`, but **your app must still run Google OAuth** and pass *our* access token into the API call. The docs say OAuth is handled separately by the application.
+- That connector also tends to ask for heavier Gmail scopes (`gmail.modify`). We only need **read**.
+
+So: user taps **Connect Gmail** in Job Hunt OS (Google consent screen). We store a refresh token on the backend. OpenAI is used as a **classifier**, not as the mailbox.
+
+### Recommended pipeline
+
+```mermaid
+flowchart LR
+  oauth[GmailOAuth]
+  watch[GmailWatch_PubSub]
+  query[NarrowSearch]
+  classify[RulesPlusLLM]
+  appRow[Application]
+  cal[OptionalCalendar]
+  swift[SwiftTracker]
+
+  oauth --> watch
+  watch --> query
+  query --> classify
+  classify --> appRow
+  classify --> cal
+  appRow --> swift
+```
+
+1. **OAuth** — `gmail.readonly` (+ `userinfo.email`). Optional later: `calendar.events.readonly` for interview holds. Personal/testing Google Cloud project is enough for you; a public multi-user app would need Google’s restricted-scope verification.
+2. **Do not scan the whole mailbox.** Gmail search first, e.g. ATS domains (`greenhouse.io`, `lever.co`, `ashbyhq.com`, `myworkday.com`, `smartrecruiters.com`), plus subjects/phrases (`application`, `unfortunately`, `interview`, `availability`, `next steps`, `offer`). Also match **From** / subject against companies already in `Application` or `Job`.
+3. **Notify, don’t poll forever.** `users.watch` → Pub/Sub (renew at least every 7 days). Fallback: poll every 15–30 minutes if Pub/Sub is not set up yet.
+4. **Classify** a small payload (headers + snippet + cleaned text), not the entire thread dump:
+   - Deterministic rules first (known ATS templates).
+   - OpenAI structured output second: `{ type, company, jobTitle, confidence, eventTime, meetingUrl, nextAction }`.
+   - Types: `receipt`, `rejection`, `request_info`, `recruiter_screen`, `interview_invite`, `interview_reschedule`, `offer`, `newsletter_ignore`.
+5. **Link** to an existing `Application` (company + title + recency). If none, create a **suggested** application (“you may have applied at X”) for you to confirm — useful when you applied outside the app.
+6. **High confidence** auto-updates status (rejection, interview). **Medium** lands in a “Needs review” pile in the tracker. Never silently invent an interview time.
+7. **Calendar (optional)** — if they also connect Calendar, attach the event; otherwise parse the time from the email and show a “Add to Calendar” action.
+
+### OpenAI’s role (narrow)
+
+Use the same `OPENAI_API_KEY` (or the user’s key they paste into *our* settings) only to label mail we already selected. Do **not** give the model a live mailbox tool on a timer — that is slower, more expensive, and easier to over-share.
+
+If we ever use `connector_gmail` for an interactive “what did this recruiter say?” chat, it still uses **our** OAuth token, not ChatGPT’s.
+
+Outlook later: same pattern (`connector_outlookemail` still needs Microsoft OAuth in our app).
+
+### Privacy
+
+- Encrypt refresh tokens at rest.
+- Persist `gmailMessageId`, labels, classification, and a short snippet — not the full body forever.
+- A disconnect button revokes the Google grant and deletes stored mail payloads.
+- Charts use status timestamps from `Application`, same as manual updates.
 
 ## Swift Charts (home + tracker)
 
@@ -397,7 +458,9 @@ apps/swift/              SwiftUI client
 - **Match** — score vector, explanation, **difficulty** (`easy` \| `medium` \| `reach`)
 - **DailyRollup** — date, newMatches, easy/medium/reach counts, applications by status
 - **EditSuggestion / TailoringSession / ResumeVersion**
-- **Application** — status, timestamps (for funnel + time series)
+- **Application** — status, timestamps (for funnel + time series), `source` (`manual` \| `in_app` \| `gmail_inferred`)
+- **MailAccount** — Google (or later Microsoft) OAuth, watch expiration, history id
+- **MailEvent** — message id, classification, confidence, linked `Application`, review state
 - **SyncCursor** — per device, last `updatedAt` pulled
 
 ## Implementation phases
@@ -428,6 +491,13 @@ apps/swift/              SwiftUI client
 - ATS apply adapters where endpoints exist
 - Chart taps deep-link into the filtered inbox
 
+### Phase 4 — Gmail tracker
+
+- Connect Gmail (readonly OAuth) from the Swift settings screen
+- Narrow search + watch; classify receipt / rejection / interview / offer
+- Auto-update high-confidence rows; “Needs review” for the rest
+- Optional Google Calendar attach; Outlook later
+
 ## Env / keys (as sources are enabled)
 
 - `ADZUNA_APP_ID`, `ADZUNA_APP_KEY`
@@ -437,6 +507,9 @@ apps/swift/              SwiftUI client
 - `JOBSPIPE_API_KEY` (or Hirebase / Jobo)
 - `JOOBLE_API_KEY`
 - `OPENAI_API_KEY` or `LLM_BASE_URL` + `LLM_API_KEY`
+- `APNS_KEY_ID` / `APNS_TEAM_ID` / `APNS_PRIVATE_KEY` (optional, for new-match pings)
+- `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` (Gmail / Calendar)
+- `MAIL_TOKEN_ENCRYPTION_KEY`
 
 Keys are per-source and optional. The still-pulling dropdown is how a missing key is surfaced.
 
@@ -450,6 +523,8 @@ Keys are per-source and optional. The still-pulling dropdown is how a missing ke
 - **Provider ToS / keys:** each adapter stays behind that vendor’s documented API or licensed feed. Keys never ship in the Swift app.
 - **Sync drift:** backend is source of truth; conflict rule is last-write on application status with server timestamp.
 - **Always-on cost:** one small worker box is enough for a personal hunt; cap on-demand refreshes so a retry loop cannot burn JSearch/LLM quota.
+- **Gmail restricted scope:** `gmail.readonly` is fine for a personal Cloud project. Shipping to many users requires Google app verification. Do not reuse ChatGPT’s Gmail connection — it is not available to our API.
+- **Mail false positives:** newsletters and “jobs for you” blasts look like recruiter mail; require company link or user confirm below a confidence threshold.
 
 ## Success for v1
 

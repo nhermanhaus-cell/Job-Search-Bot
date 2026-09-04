@@ -17,6 +17,7 @@ Job boards make it hard to explore several backgrounds at once and to see the sh
 - **Swift Charts:** applications tracker, new matching jobs over time, easy / medium / reach breakdown
 - **Deep JD read** + LinkedIn-style match with a why-line
 - **Suggested edits** from the merged inventory; approve-then-send
+- **Gmail (optional):** connect your inbox via Google OAuth so the backend can file receipts, rejections, and interview mail onto the tracker. ChatGPT’s Gmail connector is not reused; OpenAI only classifies mail we already fetched.
 
 ## Status
 
