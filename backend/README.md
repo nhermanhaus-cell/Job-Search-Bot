@@ -1,6 +1,6 @@
 # Job Hunt OS backend
 
-Hono + Prisma + SQLite. Owns Gmail OAuth, mail ingest, and classification.
+Hono + Prisma + SQLite. System of record for resume intake, title interests, provider search, job matching/tailoring, application charts, Gmail OAuth, and mail classification.
 
 ## Classifier model
 
@@ -28,6 +28,21 @@ npm run dev
 ```
 
 Open http://localhost:3000 — Connect Gmail, or **Load demo inbox** without Google keys.
+
+## Product APIs
+
+- `POST /api/profile/resumes` — multi-file PDF/DOCX/TXT intake
+- `GET/PATCH /api/profile` — merged background and preferences
+- `POST /api/profile/titles` — pinned role interests
+- `POST /api/search/sessions` + `/events` — parallel provider search over SSE
+- `GET /api/jobs` and `/api/jobs/:id` — matches and deep requirements
+- `POST /api/jobs/paste` — analyze a manually pasted JD
+- `PATCH /api/jobs/:id/suggestions/:suggestionId` — accept/reject/edit
+- `POST /api/jobs/:id/apply` — create the tracker row before opening the listing
+- `GET /api/stats/jobs` — match/difficulty chart rollups
+- `GET /api/sync` — Swift client refresh
+
+Demo, Remotive, and Remote OK need no source key. Adzuna and USAJobs are optional in `.env`.
 
 ## Connect Gmail
 

@@ -1,30 +1,40 @@
-# Job Hunt OS — SwiftUI client
+# Job Hunt OS — SwiftUI app
 
-Swift package (`JobHuntKit` + `JobHuntUI`) that talks to the backend at `http://127.0.0.1:3000`.
+The full product surface is implemented in SwiftUI:
 
-Gmail OAuth and classification run on the backend. This target only syncs applications, mail events, and charts.
+- iPhone: Home, Hunt, Resume, Tracker, Settings tabs
+- Mac: the same destinations in a sidebar
+- Multi-resume onboarding and role-title suggestions
+- Source-by-source SSE search
+- Full JD requirements, fit score, easy / medium / reach
+- Resume edit suggestions and application handoff
+- Swift Charts and Gmail tracker
+- SwiftData offline snapshots
 
-## Open in Xcode
+`JobHuntKit` contains API models/client. `JobHuntUI` contains the adaptive app. `JobHuntApp` is the `@main` target.
 
-1. Start the backend (`cd backend && npm run dev`).
-2. File → New → Project → App (iOS 17+ or macOS 14+).
-3. Add this package (File → Add Package Dependencies → Add Local).
-4. Set the app entry to wrap `TrackerView()` from `JobHuntUI`.
+## Open on a Mac
 
-```swift
-import JobHuntUI
-import SwiftUI
+Install XcodeGen, then:
 
-@main
-struct JobHuntOSApp: App {
-    var body: some Scene {
-        WindowGroup {
-            TrackerView()
-        }
-    }
-}
+```bash
+cd apps/swift/JobHuntOS
+xcodegen generate
+open JobHuntOS.xcodeproj
 ```
 
-On iOS Simulator, `127.0.0.1` is the simulator itself. Point `APIClient` at your Mac’s LAN IP, or use the backend dashboard in Safari for Connect Gmail.
+Or open `Package.swift` directly to run the macOS executable.
 
-App Transport Security: allow local networking (`NSAllowsLocalNetworking`) if you keep HTTP.
+Start the backend first:
+
+```bash
+cd backend
+npm install
+npx prisma generate
+npx prisma db push
+npm run dev
+```
+
+The default URL is `http://127.0.0.1:3000`. On a physical iPhone, set the backend URL in Settings to the server or Mac LAN address. The XcodeGen project enables local HTTP networking for development.
+
+Gmail OAuth, provider keys, AI parsing/classification, and job search workers stay on the backend. The Apple app only receives scoped JSON and SSE events.

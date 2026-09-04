@@ -112,11 +112,17 @@ public struct TrackerView: View {
                         Text(app.jobTitle ?? "Role unknown").foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(app.status.capitalized)
-                        .font(.caption.bold())
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.quaternary, in: Capsule())
+                    Menu(app.status.capitalized) {
+                        ForEach(["queued", "opened", "submitted", "interview", "offer", "rejected", "closed"], id: \.self) { status in
+                            Button(status.capitalized) {
+                                Task {
+                                    try? await store.client.updateApplication(id: app.id, status: status)
+                                    await store.refresh()
+                                }
+                            }
+                        }
+                    }
+                    .font(.caption.bold())
                 }
                 .padding(.vertical, 4)
             }
@@ -141,6 +147,21 @@ public struct ApplicationCharts: View {
                 )
             }
             .frame(height: 180)
+
+            if let series = stats.series, !series.isEmpty {
+                Text("Applications over time").font(.headline)
+                Chart(series) { day in
+                    LineMark(
+                        x: .value("Date", day.date),
+                        y: .value("Applications", day.applications)
+                    )
+                    PointMark(
+                        x: .value("Date", day.date),
+                        y: .value("Applications", day.applications)
+                    )
+                }
+                .frame(height: 170)
+            }
 
             if !stats.byClassification.isEmpty {
                 Text("Recruiting mail").font(.headline)

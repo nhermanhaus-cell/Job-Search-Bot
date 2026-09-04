@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { ensureProfile, prisma } from "../db.js";
+import { providers } from "../jobs/providers.js";
 import { createSearchSession, feedFor } from "../jobs/search.js";
 
 export const searchRoutes = new Hono();
@@ -68,12 +69,15 @@ searchRoutes.get("/sessions/:id/events", async (c) => {
 
 searchRoutes.get("/sources", (c) =>
   c.json({
-    sources: [
-      { id: "demo", name: "Demo listings", configured: true },
-      { id: "remotive", name: "Remotive", configured: true },
-      { id: "remoteok", name: "Remote OK", configured: true },
-      { id: "adzuna", name: "Adzuna", configured: Boolean(process.env.ADZUNA_APP_ID) },
-      { id: "usajobs", name: "USAJobs", configured: Boolean(process.env.USAJOBS_API_KEY) },
-    ],
+    sources: [...providers.values()].map((provider) => ({
+      id: provider.name,
+      name: provider.name
+        .replace("remoteok", "Remote OK")
+        .replace("usajobs", "USAJobs")
+        .replace("jsearch", "JSearch / Google Jobs")
+        .replace(/^./, (value) => value.toUpperCase()),
+      configured: provider.configured(),
+      missingReason: provider.configured() ? null : provider.missingReason,
+    })),
   }),
 );

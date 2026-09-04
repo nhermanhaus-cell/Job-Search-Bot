@@ -203,7 +203,7 @@ struct BandPill: View {
     var score: Int?
 
     var body: some View {
-        Text([difficulty.rawValue.capitalized, score.map(String.init)].compactMap { $0 }.joined(separator: " · "))
+        Text(score.map { "\(difficulty.rawValue.capitalized) · \($0)" } ?? difficulty.rawValue.capitalized)
             .font(.caption.bold())
             .padding(.horizontal, 8)
             .padding(.vertical, 4)

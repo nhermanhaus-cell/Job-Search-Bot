@@ -37,6 +37,12 @@ export const env = {
   adzunaAppKey: optional("ADZUNA_APP_KEY"),
   usajobsApiKey: optional("USAJOBS_API_KEY"),
   usajobsEmail: optional("USAJOBS_EMAIL"),
+  jsearchApiKey: optional("JSEARCH_API_KEY", optional("RAPIDAPI_KEY")),
+  joobleApiKey: optional("JOOBLE_API_KEY"),
+  greenhouseBoards: optional("GREENHOUSE_BOARDS"),
+  leverSites: optional("LEVER_SITES"),
+  ashbyBoards: optional("ASHBY_BOARDS"),
+  jobRefreshMs: Number(optional("JOB_REFRESH_MS", String(4 * 60 * 60 * 1000))),
 };
 
 export const googleRedirectUri = `${env.publicUrl.replace(/\/$/, "")}/api/mail/google/callback`;

@@ -83,6 +83,16 @@ public actor APIClient {
         return box.applications
     }
 
+    public func updateApplication(id: String, status: String) async throws {
+        struct Body: Encodable { var status: String }
+        struct Box: Decodable { var application: Application }
+        let _: Box = try await jsonRequest(
+            "/api/applications/\(id)",
+            method: "PATCH",
+            body: Body(status: status)
+        )
+    }
+
     public func stats() async throws -> ApplicationStats {
         try await get("/api/applications/stats")
     }
@@ -227,6 +237,17 @@ public actor APIClient {
             "/api/profile/experience/\(id)",
             method: "PATCH",
             body: Body(company: company, title: title, bullets: bullets)
+        )
+    }
+
+    public func resolveConflict(id: String, value: String) async throws {
+        struct Body: Encodable { var value: String }
+        struct Raw: Decodable { var id: String }
+        struct Box: Decodable { var conflict: Raw }
+        let _: Box = try await jsonRequest(
+            "/api/profile/conflicts/\(id)/resolve",
+            method: "POST",
+            body: Body(value: value)
         )
     }
 

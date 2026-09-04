@@ -98,6 +98,30 @@ public struct OnboardingView: View {
                     }
                 }
             }
+            if let conflicts = store.profile?.profileConflicts, !conflicts.isEmpty {
+                Section("Resolve resume conflicts") {
+                    ForEach(conflicts) { conflict in
+                        VStack(alignment: .leading, spacing: 7) {
+                            Label(conflict.message, systemImage: "exclamationmark.triangle")
+                                .foregroundStyle(.orange)
+                            HStack {
+                                ForEach(conflict.options, id: \.self) { option in
+                                    Button(option) {
+                                        Task {
+                                            try? await store.client.resolveConflict(
+                                                id: conflict.id,
+                                                value: option
+                                            )
+                                            store.profile = try? await store.client.profile()
+                                        }
+                                    }
+                                    .buttonStyle(.bordered)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             Button("Continue to role interests") { step = 2 }
                 .buttonStyle(.borderedProminent)
         }

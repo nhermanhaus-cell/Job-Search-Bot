@@ -229,8 +229,244 @@ const usajobs: Provider = {
   },
 };
 
+const jsearch: Provider = {
+  name: "jsearch",
+  configured: () => Boolean(env.jsearchApiKey),
+  missingReason: "Set JSEARCH_API_KEY or RAPIDAPI_KEY",
+  search: async ({ query, location, remote }) => {
+    const url = new URL("https://jsearch.p.rapidapi.com/search");
+    url.searchParams.set("query", `${query}${location ? ` in ${location}` : ""}`);
+    url.searchParams.set("page", "1");
+    url.searchParams.set("num_pages", "1");
+    if (remote) url.searchParams.set("remote_jobs_only", "true");
+    const response = await fetch(url, {
+      headers: {
+        "x-rapidapi-key": env.jsearchApiKey,
+        "x-rapidapi-host": "jsearch.p.rapidapi.com",
+      },
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = (await response.json()) as {
+      data?: {
+        job_id: string;
+        job_title: string;
+        employer_name: string;
+        job_city?: string;
+        job_state?: string;
+        job_is_remote?: boolean;
+        job_description?: string;
+        job_apply_link: string;
+        job_min_salary?: number;
+        job_max_salary?: number;
+        job_posted_at_datetime_utc?: string;
+      }[];
+    };
+    return (data.data ?? []).map((job) => ({
+      provider: "jsearch",
+      providerJobId: job.job_id,
+      title: job.job_title,
+      company: job.employer_name,
+      location: [job.job_city, job.job_state].filter(Boolean).join(", ") || (job.job_is_remote ? "Remote" : null),
+      remote: job.job_is_remote,
+      description: job.job_description || "",
+      listingUrl: job.job_apply_link,
+      salaryText:
+        job.job_min_salary || job.job_max_salary
+          ? `$${job.job_min_salary || "?"}–$${job.job_max_salary || "?"}`
+          : null,
+      postedAt: job.job_posted_at_datetime_utc ? new Date(job.job_posted_at_datetime_utc) : null,
+    }));
+  },
+};
+
+const jooble: Provider = {
+  name: "jooble",
+  configured: () => Boolean(env.joobleApiKey),
+  missingReason: "Set JOOBLE_API_KEY",
+  search: async ({ query, location }) => {
+    const response = await fetch(`https://jooble.org/api/${env.joobleApiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ keywords: query, location: location || "" }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const data = (await response.json()) as {
+      jobs?: {
+        id?: number | string;
+        title: string;
+        company: string;
+        location?: string;
+        snippet?: string;
+        link: string;
+        salary?: string;
+        updated?: string;
+      }[];
+    };
+    return (data.jobs ?? []).slice(0, 30).map((job) => ({
+      provider: "jooble",
+      providerJobId: String(job.id || job.link),
+      title: stripHtml(job.title),
+      company: stripHtml(job.company),
+      location: job.location,
+      description: stripHtml(job.snippet || ""),
+      listingUrl: job.link,
+      salaryText: job.salary || null,
+      postedAt: job.updated ? new Date(job.updated) : null,
+    }));
+  },
+};
+
+function slugs(value: string): string[] {
+  return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+const greenhouse: Provider = {
+  name: "greenhouse",
+  configured: () => slugs(env.greenhouseBoards).length > 0,
+  missingReason: "Set GREENHOUSE_BOARDS to comma-separated company board slugs",
+  search: async ({ query }) => {
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const batches = await Promise.all(
+      slugs(env.greenhouseBoards).map(async (board) => {
+        const response = await fetch(
+          `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs?content=true`,
+          { signal: AbortSignal.timeout(15_000) },
+        );
+        if (!response.ok) return [];
+        const data = (await response.json()) as {
+          jobs?: {
+            id: number;
+            title: string;
+            company_name?: string;
+            location?: { name?: string };
+            content?: string;
+            absolute_url: string;
+            updated_at?: string;
+          }[];
+        };
+        return (data.jobs ?? [])
+          .filter((job) => terms.some((term) => `${job.title} ${job.content}`.toLowerCase().includes(term)))
+          .map((job) => ({
+            provider: "greenhouse",
+            providerJobId: `${board}:${job.id}`,
+            title: job.title,
+            company: job.company_name || board,
+            location: job.location?.name,
+            description: stripHtml(job.content || ""),
+            listingUrl: job.absolute_url,
+            postedAt: job.updated_at ? new Date(job.updated_at) : null,
+          }));
+      }),
+    );
+    return batches.flat().slice(0, 60);
+  },
+};
+
+const lever: Provider = {
+  name: "lever",
+  configured: () => slugs(env.leverSites).length > 0,
+  missingReason: "Set LEVER_SITES to comma-separated company site slugs",
+  search: async ({ query }) => {
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const batches = await Promise.all(
+      slugs(env.leverSites).map(async (site) => {
+        const response = await fetch(
+          `https://api.lever.co/v0/postings/${encodeURIComponent(site)}?mode=json`,
+          { signal: AbortSignal.timeout(15_000) },
+        );
+        if (!response.ok) return [];
+        const data = (await response.json()) as {
+          id: string;
+          text: string;
+          descriptionPlain?: string;
+          additionalPlain?: string;
+          hostedUrl: string;
+          categories?: { location?: string };
+          createdAt?: number;
+        }[];
+        return data
+          .filter((job) => terms.some((term) => `${job.text} ${job.descriptionPlain}`.toLowerCase().includes(term)))
+          .map((job) => ({
+            provider: "lever",
+            providerJobId: `${site}:${job.id}`,
+            title: job.text,
+            company: site,
+            location: job.categories?.location,
+            description: `${job.descriptionPlain || ""}\n${job.additionalPlain || ""}`,
+            listingUrl: job.hostedUrl,
+            postedAt: job.createdAt ? new Date(job.createdAt) : null,
+          }));
+      }),
+    );
+    return batches.flat().slice(0, 60);
+  },
+};
+
+const ashby: Provider = {
+  name: "ashby",
+  configured: () => slugs(env.ashbyBoards).length > 0,
+  missingReason: "Set ASHBY_BOARDS to comma-separated company board slugs",
+  search: async ({ query }) => {
+    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+    const batches = await Promise.all(
+      slugs(env.ashbyBoards).map(async (board) => {
+        const response = await fetch(
+          `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board)}?includeCompensation=true`,
+          { signal: AbortSignal.timeout(15_000) },
+        );
+        if (!response.ok) return [];
+        const data = (await response.json()) as {
+          jobs?: {
+            id: string;
+            title: string;
+            location?: string;
+            isRemote?: boolean;
+            isListed?: boolean;
+            descriptionPlain?: string;
+            descriptionHtml?: string;
+            jobUrl: string;
+            publishedAt?: string;
+            compensation?: { compensationTierSummary?: string };
+          }[];
+        };
+        return (data.jobs ?? [])
+          .filter((job) => job.isListed !== false)
+          .filter((job) => terms.some((term) => `${job.title} ${job.descriptionPlain}`.toLowerCase().includes(term)))
+          .map((job) => ({
+            provider: "ashby",
+            providerJobId: `${board}:${job.id}`,
+            title: job.title,
+            company: board,
+            location: job.location,
+            remote: job.isRemote,
+            description: job.descriptionPlain || stripHtml(job.descriptionHtml || ""),
+            listingUrl: job.jobUrl,
+            salaryText: job.compensation?.compensationTierSummary || null,
+            postedAt: job.publishedAt ? new Date(job.publishedAt) : null,
+          }));
+      }),
+    );
+    return batches.flat().slice(0, 60);
+  },
+};
+
 export const providers = new Map(
-  [demo, remotive, remoteok, adzuna, usajobs].map((provider) => [provider.name, provider]),
+  [demo, remotive, remoteok, adzuna, usajobs, jsearch, jooble, greenhouse, lever, ashby].map(
+    (provider) => [provider.name, provider],
+  ),
 );
 
-export const defaultProviderNames = ["demo", "remotive", "remoteok", "adzuna", "usajobs"];
+export const defaultProviderNames = [
+  "demo",
+  "remotive",
+  "remoteok",
+  "jsearch",
+  "adzuna",
+  "jooble",
+  "usajobs",
+  "greenhouse",
+  "lever",
+  "ashby",
+];

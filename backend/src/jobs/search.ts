@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { prisma } from "../db.js";
-import { deepRead, scoreJob } from "./match.js";
+import { deepReadJob, scoreJob } from "./match.js";
 import { defaultProviderNames, providers } from "./providers.js";
 import type { ProviderJob, SearchEvent, SearchQuery } from "./types.js";
 
@@ -115,7 +115,7 @@ async function runSearch(
 }
 
 export async function storeAndMatch(profileId: string, candidate: ProviderJob) {
-  const requirements = deepRead(candidate.description, candidate.title);
+  const requirements = await deepReadJob(candidate.description, candidate.title);
   const source = {
     provider: candidate.provider,
     providerJobId: candidate.providerJobId,

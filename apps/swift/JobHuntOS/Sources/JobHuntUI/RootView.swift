@@ -30,9 +30,13 @@ public struct RootView: View {
         Group {
             #if os(macOS)
             NavigationSplitView {
-                List(AppDestination.allCases, selection: $selection) { destination in
-                    Label(destination.rawValue, systemImage: destination.icon)
-                        .tag(destination)
+                List(AppDestination.allCases) { destination in
+                    Button {
+                        selection = destination
+                    } label: {
+                        Label(destination.rawValue, systemImage: destination.icon)
+                    }
+                    .buttonStyle(.plain)
                 }
                 .navigationTitle("Job Hunt OS")
             } detail: {

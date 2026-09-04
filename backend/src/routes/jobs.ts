@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { ensureProfile, prisma } from "../db.js";
 import { deepRead } from "../jobs/match.js";
 import { storeAndMatch } from "../jobs/search.js";
+import { renderResumePdf } from "../resume/pdf.js";
 
 export const jobRoutes = new Hono();
 
@@ -183,8 +184,10 @@ jobRoutes.get("/:id/packet", async (c) => {
         }),
       },
     }));
-  c.header("Content-Disposition", `attachment; filename="${job.company}-${job.title}.json"`);
-  return c.body(version.contentJson, 200, { "Content-Type": "application/json" });
+  const pdf = await renderResumePdf(parseJson(version.contentJson, {}));
+  const safeName = `${job.company}-${job.title}`.replace(/[^a-z0-9-]+/gi, "-");
+  c.header("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
+  return c.body(new Uint8Array(pdf), 200, { "Content-Type": "application/pdf" });
 });
 
 jobRoutes.post("/:id/apply", async (c) => {

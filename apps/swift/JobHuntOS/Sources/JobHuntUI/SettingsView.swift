@@ -74,7 +74,7 @@ public struct SettingsView: View {
                                 source.configured ? "Ready" : "Needs key",
                                 systemImage: source.configured ? "checkmark.circle" : "key"
                             )
-                            .foregroundStyle(source.configured ? .green : .orange)
+                            .foregroundStyle(source.configured ? Color.green : Color.orange)
                         }
                     }
                 }

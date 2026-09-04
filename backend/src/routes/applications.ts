@@ -48,9 +48,18 @@ applicationRoutes.get("/stats", async (c) => {
   for (const ev of events) {
     byClass[ev.classification] = (byClass[ev.classification] ?? 0) + 1;
   }
+  const seriesMap = new Map<string, { date: string; applications: number; interviews: number }>();
+  for (const app of applications) {
+    const date = (app.submittedAt ?? app.appliedAt ?? app.createdAt).toISOString().slice(0, 10);
+    const row = seriesMap.get(date) ?? { date, applications: 0, interviews: 0 };
+    row.applications += 1;
+    if (app.status === "interview" || app.status === "offer") row.interviews += 1;
+    seriesMap.set(date, row);
+  }
   return c.json({
     totals: { applications: applications.length, mailEvents: events.length },
     byStatus,
     byClassification: byClass,
+    series: [...seriesMap.values()].sort((a, b) => a.date.localeCompare(b.date)),
   });
 });

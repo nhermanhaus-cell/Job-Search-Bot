@@ -1,4 +1,6 @@
 import type { ExperienceItem, Profile, Skill, TitleInterest } from "@prisma/client";
+import OpenAI from "openai";
+import { env } from "../env.js";
 import type { JobRequirements, ProviderJob } from "./types.js";
 
 type MatchProfile = Profile & {
@@ -90,6 +92,66 @@ export function deepRead(description: string, title = ""): JobRequirements {
     onCall: /\bon[- ]call|after hours|weekends\b/i.test(text),
     degree,
   };
+}
+
+export async function deepReadJob(description: string, title = ""): Promise<JobRequirements> {
+  const fallback = deepRead(description, title);
+  if (!env.openaiApiKey || description.length < 120) return fallback;
+  try {
+    const client = new OpenAI({ apiKey: env.openaiApiKey });
+    const completion = await client.chat.completions.create({
+      model: env.openaiModel,
+      temperature: 0,
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "job_requirements",
+          strict: true,
+          schema: {
+            type: "object",
+            additionalProperties: false,
+            properties: {
+              minYears: { type: ["integer", "null"] },
+              maxYears: { type: ["integer", "null"] },
+              seniority: { type: "string" },
+              requiredSkills: { type: "array", items: { type: "string" } },
+              impliedRequirements: { type: "array", items: { type: "string" } },
+              workAuthorization: { type: ["string", "null"] },
+              travel: { type: ["string", "null"] },
+              onCall: { type: "boolean" },
+              degree: { type: ["string", "null"] },
+            },
+            required: [
+              "minYears",
+              "maxYears",
+              "seniority",
+              "requiredSkills",
+              "impliedRequirements",
+              "workAuthorization",
+              "travel",
+              "onCall",
+              "degree",
+            ],
+          },
+        },
+      },
+      messages: [
+        {
+          role: "system",
+          content:
+            "Read the complete job description. Separate true gates from preferences. Surface buried or implied constraints such as lead scope, metro-limited remote, travel, on-call, work authorization, clearance, degree, and years. Quote concise requirement phrases; do not invent constraints.",
+        },
+        {
+          role: "user",
+          content: JSON.stringify({ title, description: description.slice(0, 24_000), regexFallback: fallback }),
+        },
+      ],
+    });
+    const raw = completion.choices[0]?.message?.content;
+    return raw ? (JSON.parse(raw) as JobRequirements) : fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export function scoreJob(profile: MatchProfile, job: ProviderJob, requirements: JobRequirements) {

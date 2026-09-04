@@ -21,6 +21,7 @@ profileRoutes.get("/", async (c) => {
       experienceItems: { orderBy: { startDate: "desc" } },
       skills: { orderBy: { confidence: "desc" } },
       titleInterests: { orderBy: { createdAt: "asc" } },
+      profileConflicts: { where: { status: "pending" }, orderBy: { createdAt: "asc" } },
     },
   });
   return c.json({
@@ -37,6 +38,10 @@ profileRoutes.get("/", async (c) => {
         sourceDocumentIds: json<string[]>(skill.sourceDocumentIds, []),
       })),
       resumeDocuments: profile.resumeDocuments.map(({ rawText: _text, ...document }) => document),
+      profileConflicts: profile.profileConflicts.map((conflict) => ({
+        ...conflict,
+        options: json<string[]>(conflict.optionsJson, []),
+      })),
     },
   });
 });
@@ -107,6 +112,30 @@ profileRoutes.post("/resumes", async (c) => {
         const sourceIds = [
           ...new Set([...json<string[]>(existing.sourceDocumentIds, []), document.id]),
         ];
+        for (const [field, oldValue, newValue] of [
+          ["startDate", existing.startDate, item.startDate],
+          ["endDate", existing.endDate, item.endDate],
+        ] as const) {
+          if (oldValue && newValue && oldValue !== newValue) {
+            const duplicate = await prisma.profileConflict.findFirst({
+              where: {
+                profileId: profile.id,
+                field: `experience.${existing.id}.${field}`,
+                status: "pending",
+              },
+            });
+            if (!duplicate) {
+              await prisma.profileConflict.create({
+                data: {
+                  profileId: profile.id,
+                  field: `experience.${existing.id}.${field}`,
+                  message: `${item.title} at ${item.company} has conflicting ${field === "startDate" ? "start" : "end"} dates.`,
+                  optionsJson: JSON.stringify([oldValue, newValue]),
+                },
+              });
+            }
+          }
+        }
         await prisma.experienceItem.update({
           where: { id: existing.id },
           data: {
@@ -268,4 +297,22 @@ profileRoutes.post("/skills", async (c) => {
 profileRoutes.delete("/skills/:id", async (c) => {
   await prisma.skill.delete({ where: { id: c.req.param("id") } });
   return c.json({ ok: true });
+});
+
+profileRoutes.post("/conflicts/:id/resolve", async (c) => {
+  const body = await c.req.json<{ value: string }>();
+  const conflict = await prisma.profileConflict.findUnique({ where: { id: c.req.param("id") } });
+  if (!conflict) return c.json({ error: "not found" }, 404);
+  const [, experienceId, field] = conflict.field.split(".");
+  if (experienceId && (field === "startDate" || field === "endDate")) {
+    await prisma.experienceItem.update({
+      where: { id: experienceId },
+      data: field === "startDate" ? { startDate: body.value } : { endDate: body.value },
+    });
+  }
+  const resolved = await prisma.profileConflict.update({
+    where: { id: conflict.id },
+    data: { resolvedValue: body.value, status: "resolved" },
+  });
+  return c.json({ conflict: resolved });
 });

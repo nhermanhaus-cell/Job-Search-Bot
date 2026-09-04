@@ -53,11 +53,19 @@ public struct ApplicationStats: Codable, Sendable {
     public var totals: Totals
     public var byStatus: [String: Int]
     public var byClassification: [String: Int]
+    public var series: [ApplicationDay]?
 
     public struct Totals: Codable, Sendable {
         public var applications: Int
         public var mailEvents: Int
     }
+}
+
+public struct ApplicationDay: Codable, Identifiable, Sendable {
+    public var date: String
+    public var applications: Int
+    public var interviews: Int
+    public var id: String { date }
 }
 
 public struct SyncPayload: Codable, Sendable {
@@ -83,6 +91,16 @@ public struct Profile: Codable, Identifiable, Sendable {
     public var experienceItems: [ExperienceItem]
     public var skills: [Skill]
     public var titleInterests: [TitleInterest]
+    public var profileConflicts: [ProfileConflict]
+}
+
+public struct ProfileConflict: Codable, Identifiable, Sendable {
+    public var id: String
+    public var field: String
+    public var message: String
+    public var options: [String]
+    public var resolvedValue: String?
+    public var status: String
 }
 
 public struct ResumeDocument: Codable, Identifiable, Sendable {

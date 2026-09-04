@@ -1,6 +1,6 @@
 # Job Hunt OS
 
-Backend-powered job hunt with a SwiftUI client. This slice ships **automatic Gmail tracking**: connect Gmail once, classify recruiter mail on the server, update the application tracker, and chart the pipeline in Swift.
+Backend-powered job hunt with a complete multiplatform SwiftUI client. Upload resumes, choose role interests, watch sources load independently, inspect hidden requirements, tailor a grounded resume, apply, and track the pipeline through Gmail.
 
 Planning background: [docs/PLAN.md](docs/PLAN.md).
 
@@ -14,6 +14,18 @@ Planning background: [docs/PLAN.md](docs/PLAN.md).
 | App architecture | **TypeScript backend + SwiftUI client** | Linux/Mac worker can poll Gmail; the phone only syncs |
 
 Set `OPENAI_API_KEY` to enable the model fallback. Without it, deterministic rules still file high-signal ATS mail.
+
+## What is implemented
+
+- **SwiftUI app:** iPhone tabs + Mac sidebar for Home, Hunt, Resume, Tracker, Settings
+- **Resume intake:** multiple PDF/DOCX/TXT files, merged facts, title suggestions
+- **Live hunt:** Demo, Remotive, Remote OK; optional Adzuna and USAJobs; SSE source status
+- **Deep JD matching:** years, seniority, skills, implied leadership, travel, degree and authorization signals
+- **Easy / medium / reach** with explainable score components and override
+- **Tailoring:** accept/reject/edit grounded suggestions and download a job-specific packet
+- **Swift Charts:** new matches, difficulty mix, application funnel
+- **SwiftData cache:** last profile, jobs and tracker state available offline
+- **Automatic Gmail tracking:** receipts, rejections and interviews update applications
 
 ## Run the backend
 
@@ -31,4 +43,4 @@ Open [http://localhost:3000](http://localhost:3000):
 - **Load demo inbox** — no Google or OpenAI keys
 - **Connect Gmail** — after you add `GOOGLE_OAUTH_CLIENT_ID` / `SECRET` (redirect `http://localhost:3000/api/mail/google/callback`)
 
-Swift package: [apps/swift/JobHuntOS](apps/swift/JobHuntOS). Charts and the tracker read `/api/applications/stats` and `/api/sync`.
+Swift app: [apps/swift/JobHuntOS](apps/swift/JobHuntOS). Generate the iOS/macOS Xcode project with `xcodegen generate`, or open `Package.swift` for the macOS executable.
