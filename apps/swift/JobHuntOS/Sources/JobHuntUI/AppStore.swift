@@ -39,8 +39,10 @@ public final class AppStore: ObservableObject {
 
     public func refresh() async {
         do {
+            let client = self.client
+            let difficulty = selectedDifficulty
             async let profileValue = client.profile()
-            async let jobsValue = client.jobs(difficulty: selectedDifficulty)
+            async let jobsValue = client.jobs(difficulty: difficulty)
             async let appsValue = client.applications()
             async let eventsValue = client.events()
             async let appStatsValue = client.stats()

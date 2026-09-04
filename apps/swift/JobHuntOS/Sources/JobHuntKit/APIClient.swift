@@ -11,7 +11,7 @@ public actor APIClient {
         URL(string: path, relativeTo: baseURL)!
     }
 
-    private func decoder() -> JSONDecoder {
+    private nonisolated func decoder() -> JSONDecoder {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .custom { decoder in
             let value = try decoder.singleValueContainer().decode(String.self)
@@ -314,10 +314,10 @@ public actor APIClient {
 
     public func searchEvents(sessionId: String) -> AsyncThrowingStream<SearchStreamEvent, Error> {
         let eventURL = url("/api/search/sessions/\(sessionId)/events")
-        let decoder = decoder()
         return AsyncThrowingStream { continuation in
             let task = Task {
                 do {
+                    let streamDecoder = self.decoder()
                     let (bytes, response) = try await URLSession.shared.bytes(from: eventURL)
                     guard let http = response as? HTTPURLResponse, (200 ..< 300).contains(http.statusCode) else {
                         throw URLError(.badServerResponse)
@@ -326,7 +326,7 @@ public actor APIClient {
                         guard line.hasPrefix("data:") else { continue }
                         let raw = line.dropFirst(5).trimmingCharacters(in: .whitespaces)
                         guard let data = raw.data(using: .utf8) else { continue }
-                        continuation.yield(try decoder.decode(SearchStreamEvent.self, from: data))
+                        continuation.yield(try streamDecoder.decode(SearchStreamEvent.self, from: data))
                     }
                     continuation.finish()
                 } catch {
