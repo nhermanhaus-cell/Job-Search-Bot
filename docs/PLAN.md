@@ -1,6 +1,6 @@
 # Job Hunt OS — Product Plan
 
-A daily job-hunt tool: ingest a rich background from one or more resumes, suggest roles and titles, stream listings **source by source** (clickable as they land), fully read each JD for hidden requirements, match like LinkedIn, suggest resume edits, then apply after you approve the packet.
+A daily job-hunt tool: ingest a rich background from one or more resumes, suggest roles and titles, run source searches **on a backend**, deliver results to a **SwiftUI client**, fully read each JD for hidden requirements, match like LinkedIn, chart the hunt, suggest resume edits, then apply after you approve the packet.
 
 This repo is greenfield. This file is the implementation contract.
 
@@ -8,10 +8,13 @@ This repo is greenfield. This file is the implementation contract.
 
 | Decision | Choice |
 |---|---|
-| Audience | Personal web app first; schema ready for more users later |
-| Stack | Next.js (App Router) + TypeScript + SQLite/Prisma (Postgres later) |
-| Search | Parallel providers; results stream in per source |
+| Audience | Personal first; one backend, SwiftUI app (Mac + iPhone) as the client |
+| Client | SwiftUI + Swift Charts + SwiftData local cache |
+| Backend | TypeScript (or Python) API + worker: intake, providers, match, rollups |
+| Search | Parallel providers **on the server**; standing queries on a schedule; on-demand sessions stream to the app |
+| Delivery | Durable job store + cursor sync; SSE/WebSocket for a live hunt; optional APNs when new matches land |
 | Matching | Deterministic profile + JD graph, same shape as LinkedIn “Jobs you might be a fit for” |
+| Difficulty | Every match is banded **easy / medium / reach** for charts and inbox filters |
 | Tailoring | Suggested edits from the merged inventory; you accept, reject, or rewrite |
 | Apply | Approve-then-send: official listing URL always; ATS / partner apply where the adapter can submit |
 
@@ -24,27 +27,28 @@ flowchart TD
   upload[ResumeIntake]
   profile[MergedProfile]
   titles[TitleInterests]
-  search[SearchSession]
+  backend[BackendWorkers]
   sources[ParallelProviders]
-  stream[LiveResultStream]
-  jd[JDDeepRead]
-  match[LinkedInStyleMatch]
+  store[JobAndMatchStore]
+  sync[CursorSync_SSE_APNs]
+  app[SwiftUIApp]
+  charts[SwiftCharts]
   suggest[EditSuggestions]
-  review[ApproveEdit]
   apply[ApplyPacket]
   track[ApplicationTracker]
 
   upload --> profile
   profile --> titles
-  titles --> search
-  search --> sources
-  sources --> stream
-  stream --> jd
-  profile --> match
-  jd --> match
-  match --> suggest
-  suggest --> review
-  review --> apply
+  titles --> backend
+  backend --> sources
+  sources --> store
+  profile --> store
+  store --> sync
+  sync --> app
+  store --> charts
+  track --> charts
+  app --> suggest
+  suggest --> apply
   apply --> track
 ```
 
@@ -52,9 +56,10 @@ Daily use:
 
 1. First run: upload one or more resumes (and optional LinkedIn export / plain text). The app builds a merged background and **suggests job titles**.
 2. You add/remove titles, locations, and which sources to hit.
-3. Search starts immediately. Jobs appear **per source** with a live spinner; each row is a clickable listing as soon as that source returns.
-4. Open a job: full JD, hidden-requirement callouts, LinkedIn-style fit breakdown, suggested resume edits.
-5. Accept/reject/edit suggestions, export, approve, apply, log it.
+3. The **backend** starts (or continues) source pulls. The Swift app shows a live spinner + still-pulling dropdown; each row is a clickable listing as soon as that source returns.
+4. Home charts update from the same store: applications, new matches, easy / medium / reach.
+5. Open a job: full JD, hidden-requirement callouts, LinkedIn-style fit breakdown, suggested resume edits.
+6. Accept/reject/edit suggestions, export, approve, apply, log it. The tracker and graphs stay in sync.
 
 ## Resume intake (rich background)
 
@@ -185,7 +190,72 @@ sequenceDiagram
 
 `SearchSession` + `SearchSourceRun` rows. The UI subscribes via **SSE** (`/api/search/[id]/events`): `source_started`, `job`, `source_done`, `source_error`, `enrichment`, `session_done`. Polling fallback for environments that buffer SSE.
 
-Each `job` event includes `listingUrl` so the client can render an `<a>` immediately.
+Each `job` event includes `listingUrl` so the client can render a tappable link immediately.
+
+## Backend search and sustainable delivery
+
+Yes: source searches run on the backend and are **delivered** to the Swift app. The phone/Mac never holds provider keys and never has to stay awake for a 12-source pull.
+
+```mermaid
+flowchart LR
+  interests[SavedTitleInterests]
+  onDemand[OnDemandSession]
+  scheduler[WorkerScheduler]
+  providers[ProviderFanout]
+  cache[ProviderCache]
+  jobs[NormalizedJobs]
+  match[MatchPlusDifficulty]
+  rollup[DailyRollups]
+  api[SyncAPI]
+  live[SSE_or_WebSocket]
+  push[APNs]
+  swift[SwiftUI]
+
+  interests --> scheduler
+  onDemand --> scheduler
+  scheduler --> providers
+  providers --> cache
+  cache --> jobs
+  jobs --> match
+  match --> rollup
+  match --> api
+  match --> live
+  rollup --> api
+  scheduler --> push
+  api --> swift
+  live --> swift
+  push --> swift
+```
+
+### Two ways a search starts
+
+1. **Standing queries** — saved title interests + locations + enabled sources. A worker runs them on a schedule (default every 4–6 hours, user-tunable). This is how “new jobs that match you” stay fresh without opening the app.
+2. **On-demand session** — you tap Search (new title, new city). Same providers, streamed live to the open app via SSE/WebSocket. Results are still persisted, so killing the app does not lose them.
+
+### What “sustainable” means
+
+| Pressure | How we keep it cheap and stable |
+|---|---|
+| Provider rate limits | Cache listings by `(provider, native_id)` and query fingerprints for 24–48h. Do not re-hit Indeed-via-JSearch for the same title+city every app open. |
+| LLM cost | Deterministic match on ingest. Deep-read / vision / edit-suggest only for **new unique JD hashes** and for jobs you open. |
+| Duplicate posts | Dedupe on the server. One `Job`, many source links. Charts count jobs, not cross-posts. |
+| Payload size | App syncs a **cursor**: `GET /sync?since=`. Only new/changed jobs, matches, applications, rollups. Full snapshot on first install. |
+| Phone sleep | Workers finish on the server. If the app is backgrounded mid-session, it picks up via sync. Optional silent APNs: “14 new matches (6 easy).” |
+| Failed sources | `SearchSourceRun` stays `error` / `retry`. One dead board does not fail the session. |
+| Cost spikes | Per-user daily caps on on-demand refreshes; standing queries share the cache across titles when the provider result sets overlap. |
+
+The backend is the system of record (`Job`, `Match`, `Application`, `DailyRollup`). SwiftData is a cache so graphs and the inbox work offline.
+
+### Delivery APIs
+
+- `POST /search/sessions` — on-demand; subscribe `GET /search/sessions/:id/events`
+- `GET /sync?since=` — inbox + tracker + rollups
+- `GET /stats/jobs?from=&to=` — time series for charts (new matches by day, by difficulty, by source)
+- `GET /stats/applications?from=&to=` — applied / interview / closed
+- `PATCH /applications/:id` — tracker updates from the app
+- Push: APNs when standing-query ingest adds matches above a threshold
+
+Personal deploy: one small always-on box (Fly / Railway / a Mac mini). Keys live only there.
 
 ## Deep JD read (hidden requirements)
 
@@ -220,6 +290,18 @@ LinkedIn ranks jobs from a member graph: titles, skills, seniority, recency, loc
 - **Resume coverage** — could we surface enough inventory to make a credible tailored resume?
 
 Sort inbox by this score. Explain each job in one line: “Strong skill match; hidden 7+ years (you have 4); remote US-only.”
+
+### Easy / medium / reach
+
+The same vector is folded into one band for filters and graphs. Rules are explicit so a chart is not a vibe:
+
+| Band | When |
+|---|---|
+| **Easy** | Title affinity high, required-skill overlap high, seniority aligned, no hidden hard-miss (visa, clearance, years far above yours, onsite you cannot do) |
+| **Medium** | Title or skills good but not both; or only soft hidden misses (nice-to-have stack, “plus a degree”); or seniority one step off |
+| **Reach** | Title stretch, large skill gap, years/seniority well above your band, or a hidden hard-miss — still shown unless you hide reach |
+
+You can override a band on a job (“this is easier than it looks”). Overrides feed the tracker charts. Inbox chips: Easy / Medium / Reach.
 
 Suggested **additional titles** after a few searches: postings you consistently score well on but did not list.
 
@@ -260,26 +342,45 @@ flowchart LR
 - Custom screening questions: show them on the job page when the provider exposes them; you answer before Approve.
 - Tracker: queued → opened → submitted → interview → closed.
 
+## Swift Charts (home + tracker)
+
+The app is not only a list. Home and Tracker use **Swift Charts** on rollups the backend already computed (`DailyRollup` + live `Application` rows). Tapping a bar or slice applies the same inbox filter (date range, band, status).
+
+### Jobs applied (tracker)
+
+- **Funnel** — queued → opened → submitted → interview → offer/closed (counts + conversion %)
+- **Volume over time** — applications started or submitted per day/week
+- **Status mix** — stacked bar or donut of current pipeline
+- Optional: time-to-first-response once you log a reply
+
+### New jobs that match you
+
+- **Listed per day** — new `Match` rows since the last standing-query run (not “every cross-post”)
+- **By interest title** — which pinned title is producing inventory
+- **By source** — optional secondary chart (Indeed vs Greenhouse vs …)
+
+### Easy / medium / reach
+
+- **Stacked bar by day** (default) — how the incoming pile is shifting
+- **Donut for the current window** (“this week: 18 easy / 24 medium / 9 reach”)
+- Same bands as the inbox, so the graph and the list cannot disagree
+
+Rollups are incrementally updated when a job is first matched, when a band is overridden, and when an application status changes. The app can draw from the last synced rollup offline; it does not re-score the world on the phone.
+
 ## Architecture
 
 ```
-app/
-  onboarding/        multi-resume intake + title suggestions
-  search/            live source-by-source results
-  jobs/[id]/         JD deep read, match, suggestions, apply
-  profile/           merged inventory, titles, source keys
-  applications/      tracker
-lib/
-  intake/            parse, merge, title suggest
-  providers/         one module per source + registry
-  search/            session, SSE events, dedup
-  jd/                deep read, hidden requirements
-  match/             LinkedIn-style scorer
-  ats/               gap, score, format
-  suggest/           ranked edit suggestions
-  resume/            versions, PDF
-  apply/             adapters
-prisma/schema.prisma
+backend/                 API + workers (system of record)
+  providers/             one module per source
+  intake/ match/ jd/ suggest/ apply/
+  jobs/                  standing queries, sessions, cache, rollups
+  prisma/schema.prisma
+apps/swift/              SwiftUI client
+  Inbox/                 live source bar + job links
+  Charts/                applied, new matches, difficulty
+  JobDetail/             JD, suggestions, apply
+  Onboarding/            resume drop + title pin
+  Tracker/
 ```
 
 ### Data model
@@ -289,41 +390,43 @@ prisma/schema.prisma
 - **ExperienceItem / Skill / Education / Project** — facts with `sourceDocumentIds`
 - **TitleInterest** — user-pinned or typed titles, optional lens group
 - **TitleSuggestion** — generated, with reasons, accepted or dismissed
-- **ProviderAccount** — API keys / OAuth per source
+- **ProviderAccount** — API keys / OAuth per source (backend only)
 - **SearchSession / SearchSourceRun** — status, counts, errors, timings
 - **Job** — normalized; `listingUrls[]` by source
 - **JDDeepRead** — stated + hidden requirements, stack, level, domain
-- **Match** — score vector + explanation
+- **Match** — score vector, explanation, **difficulty** (`easy` \| `medium` \| `reach`)
+- **DailyRollup** — date, newMatches, easy/medium/reach counts, applications by status
 - **EditSuggestion / TailoringSession / ResumeVersion**
-- **Application**
+- **Application** — status, timestamps (for funnel + time series)
+- **SyncCursor** — per device, last `updatedAt` pulled
 
 ## Implementation phases
 
 ### Phase 0 — Intake + paste JD
 
-- Upload one or more resumes, merge profile, suggest titles, accept typed titles
-- Paste a JD → deep read + match breakdown + edit suggestions
-- No live providers yet; proves the LinkedIn-style loop
+- Backend parse/merge + Swift onboarding
+- Paste a JD → deep read + match breakdown + difficulty + edit suggestions
+- Tracker + empty chart shells (Swift Charts wired to local sample rollups)
 
-### Phase 1 — Streaming search
+### Phase 1 — Backend hunt + sync
 
-- Provider registry and SSE session
-- Source bar + still-pulling dropdown + clickable rows as they arrive
-- Ship with every provider we can key: Adzuna, USAJobs, JSearch (LinkedIn/Indeed/Glassdoor/ZipRecruiter), Greenhouse/Lever/Ashby watchlist, Remote OK / Remotive, RSS
-- Dedup and attach extra source links on the fly
+- Provider registry, standing queries, on-demand SSE
+- Swift inbox: source bar, still-pulling dropdown, clickable rows as events arrive
+- `GET /sync` + SwiftData cache
+- Ship with every provider we can key: Adzuna, USAJobs, JSearch, Greenhouse/Lever/Ashby, Remote OK / Remotive, RSS
 
-### Phase 2 — Full catalog + matching polish
+### Phase 2 — Charts + matching polish
 
-- Remaining ATS boards + specialty boards
-- Hidden-req badges on the inbox
-- Title suggestions that learn from high-fit jobs
-- Years filter as a preference
+- Live rollups: applied funnel, new matches/day, easy/medium/reach stack
+- Remaining ATS + specialty boards
+- Hidden-req badges; title suggestions from high-fit jobs
+- APNs for new-match batches
 
-### Phase 3 — Tailor + apply + tracker
+### Phase 3 — Tailor + apply
 
 - Suggestion accept/reject/edit, PDF, approve-then-send
 - ATS apply adapters where endpoints exist
-- Daily refresh of saved title interests
+- Chart taps deep-link into the filtered inbox
 
 ## Env / keys (as sources are enabled)
 
@@ -340,12 +443,14 @@ Keys are per-source and optional. The still-pulling dropdown is how a missing ke
 ## Risks
 
 - **Snippet vs full JD:** aggregators often truncate. Prefer ATS/full-page text before hidden-req scoring; show “partial JD” when we only have a snippet.
-- **Rate limits:** cache by provider job id; stagger source starts slightly if a key is shared; never block the UI on a slow source.
+- **Rate limits:** cache by provider job id and query fingerprint; standing queries, not refresh-on-every-launch.
 - **Parse conflicts:** multi-resume merge will disagree; surface conflicts instead of silently picking one.
-- **Match theater:** every score needs a why-line. If we cannot explain it, it is not a match feature.
+- **Match theater:** every score and every chart band needs a why-line. If we cannot explain it, it is not a match feature.
 - **Apply forms:** custom questions break POSTs; listing link is always the fallback.
-- **Provider ToS / keys:** each adapter stays behind that vendor’s documented API or licensed feed. The product does not special-case a source as forbidden.
+- **Provider ToS / keys:** each adapter stays behind that vendor’s documented API or licensed feed. Keys never ship in the Swift app.
+- **Sync drift:** backend is source of truth; conflict rule is last-write on application status with server timestamp.
+- **Always-on cost:** one small worker box is enough for a personal hunt; cap on-demand refreshes so a retry loop cannot burn JSearch/LLM quota.
 
 ## Success for v1
 
-You upload two resumes, get a suggested title list you can edit, hit search, and watch Indeed / LinkedIn / Greenhouse / Adzuna fill in independently. You click a listing the second it appears. Opening it shows hidden requirements and a LinkedIn-style fit explanation, plus concrete edit suggestions drawn from both resumes. You approve a version and apply without waiting for every source to finish.
+You upload two resumes on the phone or Mac, pin titles, and walk away. The backend keeps pulling sources on a schedule. Opening the app syncs new matches; on-demand search still streams source-by-source. Home shows how many jobs landed, how many are easy / medium / reach, and how the apply pipeline is moving. Tapping a slice opens that filtered list. Opening a job still shows hidden requirements, a fit explanation, and edit suggestions. You apply without the device having to finish every source.
