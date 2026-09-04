@@ -2,6 +2,18 @@ import { describe, expect, it } from "vitest";
 import { classifyWithRules } from "./classifier.js";
 
 describe("classifyWithRules", () => {
+  it("pulls the company from applying-to subjects on ATS mailers", () => {
+    const result = classifyWithRules({
+      messageId: "0",
+      fromAddress: "noreply@greenhouse.io",
+      subject: "Thank you for applying to Acme — Product Manager",
+      snippet: "Thank you for your application. We received your application for Product Manager at Acme.",
+    });
+    expect(result.type).toBe("receipt");
+    expect(result.company).toBe("Acme");
+    expect(result.jobTitle).toBe("Product Manager");
+  });
+
   it("labels application receipts", () => {
     const result = classifyWithRules({
       messageId: "1",

@@ -24,6 +24,14 @@ function clamp(n: number): number {
 }
 
 function guessCompany(payload: MailPayload): string | null {
+  const blob = [payload.subject, payload.snippet, payload.bodyText].filter(Boolean).join("\n");
+  const named = blob.match(
+    /\b(?:applying to|application (?:to|at|for)|at|join(?:ing)?)\s+([A-Z][\w.&'-]+(?:\s+[A-Z][\w.&'-]+){0,3})/,
+  );
+  if (named) {
+    const name = named[1].replace(/\s+[—–-].*$/, "").trim();
+    if (name && !/^(Product|Software|Senior|Staff|Your|This|Our)\b/i.test(name)) return name;
+  }
   const from = payload.fromAddress ?? "";
   const angle = from.match(/@([a-z0-9.-]+)/i)?.[1];
   if (angle) {
@@ -34,9 +42,6 @@ function guessCompany(payload: MailPayload): string | null {
       if (base && base.length > 2) return titleCase(base.replace(/[-_]/g, " "));
     }
   }
-  const subj = payload.subject ?? "";
-  const at = subj.match(/\bat\s+([A-Z][\w.&-]+(?:\s+[A-Z][\w.&-]+){0,3})/);
-  if (at) return at[1];
   return null;
 }
 
@@ -44,10 +49,25 @@ function titleCase(s: string): string {
   return s.replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+function guessJobTitle(payload: MailPayload): string | null {
+  const subject = payload.subject ?? "";
+  const dashed = subject.split(/\s*[—–|-]\s*/).map((s) => s.trim());
+  if (dashed.length > 1) {
+    const last = dashed[dashed.length - 1];
+    if (last && last.length < 80 && !/thank you|update|received|application$/i.test(last)) {
+      return last;
+    }
+  }
+  const blob = [payload.subject, payload.snippet].filter(Boolean).join(" ");
+  const forRole = blob.match(/\bfor (?:the )?([A-Z][A-Za-z0-9 /+&#-]{2,60}?)(?:\s+at\s+|\.|$)/);
+  if (forRole) return forRole[1].trim();
+  return null;
+}
+
 export function classifyWithRules(payload: MailPayload): ClassifiedMail {
   const text = [payload.subject, payload.snippet, payload.bodyText].filter(Boolean).join("\n");
   const company = guessCompany(payload);
-  const jobTitle = payload.subject?.match(/\b(?:for|[-–|:])\s+(.+)$/i)?.[1]?.slice(0, 80) ?? null;
+  const jobTitle = guessJobTitle(payload);
 
   if (NEWSLETTER.test(text) && !INTERVIEW.test(text) && !REJECTION.test(text) && !RECEIPT.test(text)) {
     return {
