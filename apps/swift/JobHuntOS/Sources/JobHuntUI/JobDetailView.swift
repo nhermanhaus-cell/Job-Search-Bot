@@ -49,7 +49,11 @@ public struct JobDetailView: View {
                 if let salary = job.salaryText { Text(salary) }
                 Spacer()
                 Button("Open listing") {
-                    if let url = URL(string: job.listingUrl) { openURL(url) }
+                    Task {
+                        try? await store.client.trackApply(jobId: jobID)
+                        if let url = URL(string: job.listingUrl) { openURL(url) }
+                        await store.refresh()
+                    }
                 }
                 .buttonStyle(.borderedProminent)
             }

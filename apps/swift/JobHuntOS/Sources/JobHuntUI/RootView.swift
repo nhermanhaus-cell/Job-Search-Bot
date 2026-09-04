@@ -50,7 +50,7 @@ public struct RootView: View {
         }
         .environmentObject(store)
         .task { await store.refresh() }
-        .fullScreenCover(
+        .sheet(
             isPresented: Binding(
                 get: { store.profile.map { !$0.onboardingDone } ?? false },
                 set: { _ in }

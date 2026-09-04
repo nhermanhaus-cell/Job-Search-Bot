@@ -19,11 +19,16 @@ public final class AppStore: ObservableObject {
     @Published public var error: String?
 
     public private(set) var client: APIClient
+    private let cache = OfflineCache()
 
     public init() {
         let configured = UserDefaults.standard.string(forKey: "backendURL")
             .flatMap(URL.init(string:)) ?? URL(string: "http://127.0.0.1:3000")!
         client = APIClient(baseURL: configured)
+        jobs = cache.load([Job].self, key: "jobs") ?? []
+        applications = cache.load([Application].self, key: "applications") ?? []
+        mailEvents = cache.load([MailEvent].self, key: "mailEvents") ?? []
+        profile = cache.load(Profile.self, key: "profile")
     }
 
     public func configure(baseURL: URL) {
@@ -49,6 +54,10 @@ public final class AppStore: ObservableObject {
             jobStats = try await jobStatsValue
             mailStatus = try await mailValue
             sources = try await sourcesValue
+            if let profile { cache.save(profile, key: "profile") }
+            cache.save(jobs, key: "jobs")
+            cache.save(applications, key: "applications")
+            cache.save(mailEvents, key: "mailEvents")
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -59,6 +68,7 @@ public final class AppStore: ObservableObject {
         do {
             jobs = try await client.jobs(difficulty: selectedDifficulty)
             jobStats = try await client.jobStats()
+            cache.save(jobs, key: "jobs")
         } catch {
             self.error = error.localizedDescription
         }
@@ -68,6 +78,7 @@ public final class AppStore: ObservableObject {
         do {
             try await client.uploadResumes(urls)
             profile = try await client.profile()
+            if let profile { cache.save(profile, key: "profile") }
             error = nil
         } catch {
             self.error = error.localizedDescription
@@ -79,6 +90,7 @@ public final class AppStore: ObservableObject {
         do {
             _ = try await client.addTitle(title)
             profile = try await client.profile()
+            if let profile { cache.save(profile, key: "profile") }
         } catch {
             self.error = error.localizedDescription
         }
@@ -88,6 +100,7 @@ public final class AppStore: ObservableObject {
         do {
             try await client.setTitle(interest, pinned: pinned)
             profile = try await client.profile()
+            if let profile { cache.save(profile, key: "profile") }
         } catch {
             self.error = error.localizedDescription
         }
@@ -136,7 +149,8 @@ public final class AppStore: ObservableObject {
                 case "source_skipped":
                     if let source = event.source { sourceStates[source] = "needs key" }
                 case "job":
-                    if let incoming = event.job {
+                    if var incoming = event.job {
+                        incoming.match = event.match
                         if let index = jobs.firstIndex(where: { $0.id == incoming.id }) {
                             jobs[index] = incoming
                         } else {

@@ -203,3 +203,69 @@ profileRoutes.delete("/titles/:id", async (c) => {
   await prisma.titleInterest.delete({ where: { id: c.req.param("id") } });
   return c.json({ ok: true });
 });
+
+profileRoutes.post("/experience", async (c) => {
+  const profile = await ensureProfile();
+  const body = await c.req.json<{
+    company: string;
+    title: string;
+    startDate?: string;
+    endDate?: string;
+    location?: string;
+    bullets?: string[];
+  }>();
+  const item = await prisma.experienceItem.create({
+    data: {
+      profileId: profile.id,
+      company: body.company,
+      title: body.title,
+      startDate: body.startDate,
+      endDate: body.endDate,
+      location: body.location,
+      bulletsJson: JSON.stringify(body.bullets ?? []),
+      sourceDocumentIds: "[]",
+    },
+  });
+  return c.json({ item }, 201);
+});
+
+profileRoutes.patch("/experience/:id", async (c) => {
+  const body = await c.req.json<{
+    company?: string;
+    title?: string;
+    startDate?: string;
+    endDate?: string;
+    location?: string;
+    bullets?: string[];
+  }>();
+  const { bullets, ...fields } = body;
+  const item = await prisma.experienceItem.update({
+    where: { id: c.req.param("id") },
+    data: {
+      ...fields,
+      bulletsJson: bullets ? JSON.stringify(bullets) : undefined,
+    },
+  });
+  return c.json({ item });
+});
+
+profileRoutes.delete("/experience/:id", async (c) => {
+  await prisma.experienceItem.delete({ where: { id: c.req.param("id") } });
+  return c.json({ ok: true });
+});
+
+profileRoutes.post("/skills", async (c) => {
+  const profile = await ensureProfile();
+  const body = await c.req.json<{ name: string }>();
+  const skill = await prisma.skill.upsert({
+    where: { profileId_name: { profileId: profile.id, name: body.name.trim() } },
+    create: { profileId: profile.id, name: body.name.trim() },
+    update: {},
+  });
+  return c.json({ skill }, 201);
+});
+
+profileRoutes.delete("/skills/:id", async (c) => {
+  await prisma.skill.delete({ where: { id: c.req.param("id") } });
+  return c.json({ ok: true });
+});

@@ -187,6 +187,32 @@ jobRoutes.get("/:id/packet", async (c) => {
   return c.body(version.contentJson, 200, { "Content-Type": "application/json" });
 });
 
+jobRoutes.post("/:id/apply", async (c) => {
+  const profile = await ensureProfile();
+  const job = await prisma.job.findUnique({ where: { id: c.req.param("id") } });
+  if (!job) return c.json({ error: "not found" }, 404);
+  const existing = await prisma.application.findFirst({
+    where: { profileId: profile.id, listingUrl: job.listingUrl },
+  });
+  const application = existing
+    ? await prisma.application.update({
+        where: { id: existing.id },
+        data: { status: "opened", openedAt: new Date() },
+      })
+    : await prisma.application.create({
+        data: {
+          profileId: profile.id,
+          company: job.company,
+          jobTitle: job.title,
+          status: "opened",
+          source: "in_app",
+          listingUrl: job.listingUrl,
+          openedAt: new Date(),
+        },
+      });
+  return c.json({ application });
+});
+
 async function ensureSuggestions(jobId: string) {
   const profile = await ensureProfile();
   const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });

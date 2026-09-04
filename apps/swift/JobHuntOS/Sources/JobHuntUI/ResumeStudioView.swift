@@ -7,6 +7,8 @@ public struct ResumeStudioView: View {
     @State private var showImporter = false
     @State private var showPasteJob = false
     @State private var newTitle = ""
+    @State private var newSkill = ""
+    @State private var selectedExperience: ExperienceItem?
 
     public init() {}
 
@@ -65,20 +67,37 @@ public struct ResumeStudioView: View {
 
                 Section("Experience inventory") {
                     ForEach(store.profile?.experienceItems ?? []) { item in
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(item.title).font(.headline)
-                            Text(item.company)
-                            ForEach(item.bullets, id: \.self) { bullet in
-                                Text("• \(bullet)").font(.caption).foregroundStyle(.secondary)
+                        Button {
+                            selectedExperience = item
+                        } label: {
+                            VStack(alignment: .leading, spacing: 5) {
+                                Text(item.title).font(.headline)
+                                Text(item.company)
+                                ForEach(item.bullets, id: \.self) { bullet in
+                                    Text("• \(bullet)").font(.caption).foregroundStyle(.secondary)
+                                }
+                                Text("From \(item.sourceDocumentIds.count) resume(s)")
+                                    .font(.caption2)
+                                    .foregroundStyle(.tertiary)
                             }
-                            Text("From \(item.sourceDocumentIds.count) resume(s)")
-                                .font(.caption2)
-                                .foregroundStyle(.tertiary)
                         }
+                        .buttonStyle(.plain)
                     }
                 }
 
                 Section("Skills") {
+                    HStack {
+                        TextField("Add a skill", text: $newSkill)
+                        Button("Add") {
+                            let value = newSkill
+                            newSkill = ""
+                            Task {
+                                try? await store.client.addSkill(value)
+                                store.profile = try? await store.client.profile()
+                            }
+                        }
+                        .disabled(newSkill.isEmpty)
+                    }
                     FlowLayout {
                         ForEach(store.profile?.skills ?? []) { skill in
                             Text(skill.name)
@@ -86,6 +105,14 @@ public struct ResumeStudioView: View {
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 5)
                                 .background(.quaternary, in: Capsule())
+                                .contextMenu {
+                                    Button("Delete", role: .destructive) {
+                                        Task {
+                                            try? await store.client.deleteSkill(id: skill.id)
+                                            store.profile = try? await store.client.profile()
+                                        }
+                                    }
+                                }
                         }
                     }
                 }
@@ -102,6 +129,57 @@ public struct ResumeStudioView: View {
             .sheet(isPresented: $showPasteJob) {
                 PasteJobView(isPresented: $showPasteJob)
                     .environmentObject(store)
+            }
+            .sheet(item: $selectedExperience) { item in
+                ExperienceEditor(item: item)
+                    .environmentObject(store)
+            }
+        }
+    }
+}
+
+private struct ExperienceEditor: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    let item: ExperienceItem
+    @State private var title: String
+    @State private var company: String
+    @State private var bullets: String
+
+    init(item: ExperienceItem) {
+        self.item = item
+        _title = State(initialValue: item.title)
+        _company = State(initialValue: item.company)
+        _bullets = State(initialValue: item.bullets.joined(separator: "\n"))
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Title", text: $title)
+                TextField("Company", text: $company)
+                TextField("One fact per line", text: $bullets, axis: .vertical)
+                    .lineLimit(8 ... 20)
+            }
+            .navigationTitle("Edit experience")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        Task {
+                            try? await store.client.updateExperience(
+                                id: item.id,
+                                company: company,
+                                title: title,
+                                bullets: bullets.split(separator: "\n").map(String.init)
+                            )
+                            store.profile = try? await store.client.profile()
+                            dismiss()
+                        }
+                    }
+                }
             }
         }
     }

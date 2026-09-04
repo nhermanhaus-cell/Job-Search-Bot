@@ -1,0 +1,11 @@
+Alex Candidate
+alex@example.com
+New York, NY
+
+Product Manager at Acme
+• Launched analytics tools used by 20 enterprise customers
+• Partnered with engineering, design, and sales stakeholders
+• Built a roadmap and customer discovery program
+
+SKILLS
+SQL, Jira, Analytics, Product Strategy, Roadmap, Stakeholder Management

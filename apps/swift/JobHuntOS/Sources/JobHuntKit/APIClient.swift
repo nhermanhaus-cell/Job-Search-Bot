@@ -195,6 +195,41 @@ public actor APIClient {
         )
     }
 
+    public func addSkill(_ name: String) async throws {
+        struct Body: Encodable { var name: String }
+        struct Raw: Decodable { var id: String }
+        struct Box: Decodable { var skill: Raw }
+        let _: Box = try await jsonRequest(
+            "/api/profile/skills",
+            method: "POST",
+            body: Body(name: name)
+        )
+    }
+
+    public func deleteSkill(id: String) async throws {
+        try await delete("/api/profile/skills/\(id)")
+    }
+
+    public func updateExperience(
+        id: String,
+        company: String,
+        title: String,
+        bullets: [String]
+    ) async throws {
+        struct Body: Encodable {
+            var company: String
+            var title: String
+            var bullets: [String]
+        }
+        struct Raw: Decodable { var id: String }
+        struct Box: Decodable { var item: Raw }
+        let _: Box = try await jsonRequest(
+            "/api/profile/experience/\(id)",
+            method: "PATCH",
+            body: Body(company: company, title: title, bullets: bullets)
+        )
+    }
+
     public func jobs(difficulty: Difficulty? = nil) async throws -> [Job] {
         struct Box: Decodable { var jobs: [Job] }
         let suffix = difficulty.map { "?difficulty=\($0.rawValue)" } ?? ""
@@ -264,13 +299,15 @@ public actor APIClient {
             var company: String
             var description: String
         }
-        struct Box: Decodable { var job: Job }
+        struct Box: Decodable { var job: Job; var match: JobMatch }
         let box: Box = try await jsonRequest(
             "/api/jobs/paste",
             method: "POST",
             body: Body(title: title, company: company, description: description)
         )
-        return box.job
+        var job = box.job
+        job.match = box.match
+        return job
     }
 
     public func updateMatch(jobId: String, difficulty: Difficulty?, hidden: Bool? = nil) async throws {
@@ -306,6 +343,10 @@ public actor APIClient {
             method: "POST",
             body: Body(status: status)
         )
+    }
+
+    public func trackApply(jobId: String) async throws {
+        _ = try await post("/api/jobs/\(jobId)/apply")
     }
 
     public func packetURL(jobId: String) -> URL {
