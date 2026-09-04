@@ -44,12 +44,6 @@ public enum AuthError: LocalizedError, Sendable, Equatable {
     case cancelled
     case invalidResponse
     case server(String)
-    case unauthenticated
-    case sessionExpired
-    case accountNotFound
-    case cancelled
-    case invalidResponse
-    case server(String)
 
     public var errorDescription: String? {
         switch self {
