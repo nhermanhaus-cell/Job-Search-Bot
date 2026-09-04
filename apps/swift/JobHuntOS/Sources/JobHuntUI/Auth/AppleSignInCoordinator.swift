@@ -70,7 +70,17 @@ final class AppleSignInCoordinator: NSObject, ASAuthorizationControllerDelegate,
     }
 
     func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
-        (try? AuthPresenter.anchor()) ?? ASPresentationAnchor()
+        if let anchor = try? AuthPresenter.anchor() { return anchor }
+        #if os(iOS)
+        return UIWindow()
+        #else
+        return NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1, height: 1),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        #endif
     }
 
     func authorizationController(controller: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {
