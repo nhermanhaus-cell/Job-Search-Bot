@@ -48,14 +48,19 @@ public struct JobDetailView: View {
                 Label(job.location ?? "Unknown", systemImage: "mappin")
                 if let salary = job.salaryText { Text(salary) }
                 Spacer()
-                Button("Open listing") {
-                    Task {
-                        try? await store.client.trackApply(jobId: jobID)
-                        if let url = URL(string: job.listingUrl) { openURL(url) }
-                        await store.refresh()
+                if let listingURL = webURL(job.listingUrl) {
+                    Button("Open listing") {
+                        Task {
+                            try? await store.client.trackApply(jobId: jobID)
+                            openURL(listingURL)
+                            await store.refresh()
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
+                } else {
+                    Label("Pasted description", systemImage: "doc.text")
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
                 Button("Hide") {
                     Task {
                         try? await store.client.updateMatch(jobId: jobID, difficulty: nil, hidden: true)
@@ -152,6 +157,13 @@ public struct JobDetailView: View {
         loading = true
         detail = try? await store.client.job(id: jobID)
         loading = false
+    }
+
+    private func webURL(_ value: String) -> URL? {
+        guard let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+            return nil
+        }
+        return url
     }
 }
 

@@ -21,6 +21,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.jobhuntos.app
         INFOPLIST_KEY_CFBundleDisplayName: Job Hunt OS
         INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: true
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Job Hunt OS connects to your selected job-search backend on the local network.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
         GENERATE_INFOPLIST_FILE: true
   JobHuntOS-macOS:
@@ -35,4 +36,6 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jobhuntos.mac
         INFOPLIST_KEY_CFBundleDisplayName: Job Hunt OS
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: true
+        INFOPLIST_KEY_NSLocalNetworkUsageDescription: Job Hunt OS connects to your selected job-search backend on the local network.
         GENERATE_INFOPLIST_FILE: true

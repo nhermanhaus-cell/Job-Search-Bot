@@ -24,7 +24,7 @@ public final class AppStore: ObservableObject {
 
     public init() {
         let configured = UserDefaults.standard.string(forKey: "backendURL")
-            .flatMap(URL.init(string:)) ?? URL(string: "http://127.0.0.1:3000")!
+            .flatMap(URL.init(string:)) ?? URL(string: "http://localhost:3000")!
         client = APIClient(baseURL: configured)
         jobs = cache.load([Job].self, key: "jobs") ?? []
         applications = cache.load([Application].self, key: "applications") ?? []

@@ -3,7 +3,7 @@ import Foundation
 public actor APIClient {
     public var baseURL: URL
 
-    public init(baseURL: URL = URL(string: "http://127.0.0.1:3000")!) {
+    public init(baseURL: URL = URL(string: "http://localhost:3000")!) {
         self.baseURL = baseURL
     }
 

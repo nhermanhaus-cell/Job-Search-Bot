@@ -35,6 +35,6 @@ npx prisma db push
 npm run dev
 ```
 
-The default URL is `http://127.0.0.1:3000`. On a physical iPhone, set the backend URL in Settings to the server or Mac LAN address. The XcodeGen project enables local HTTP networking for development.
+The default URL is `http://localhost:3000`. On a physical iPhone, set the backend URL in Settings to an HTTPS server or your Mac’s `.local` hostname. The XcodeGen project enables local-network access for development.
 
 Gmail OAuth, provider keys, AI parsing/classification, and job search workers stay on the backend. The Apple app only receives scoped JSON and SSE events.

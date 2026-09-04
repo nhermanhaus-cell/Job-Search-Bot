@@ -49,6 +49,7 @@ public struct TailorReviewView: View {
                 ApplyConfirmView(
                     detail: detail,
                     versionCreated: versionCreated,
+                    canOpenListing: webURL(detail.listingUrl) != nil,
                     onCreateVersion: createVersion,
                     onDownload: downloadPacket,
                     onApply: apply
@@ -128,11 +129,18 @@ public struct TailorReviewView: View {
     private func apply() async {
         if !versionCreated { await createVersion() }
         try? await store.client.trackApply(jobId: jobID)
-        if let url = detail.flatMap({ URL(string: $0.listingUrl) }) {
+        if let url = detail.flatMap({ webURL($0.listingUrl) }) {
             openURL(url)
         }
         showApplyConfirm = false
         await store.refresh()
+    }
+
+    private func webURL(_ value: String) -> URL? {
+        guard let url = URL(string: value), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else {
+            return nil
+        }
+        return url
     }
 }
 
@@ -185,6 +193,7 @@ struct ApplyConfirmView: View {
     @Environment(\.dismiss) private var dismiss
     let detail: JobDetail
     let versionCreated: Bool
+    let canOpenListing: Bool
     let onCreateVersion: () async -> Void
     let onDownload: () async -> Void
     let onApply: () async -> Void
@@ -205,8 +214,14 @@ struct ApplyConfirmView: View {
                     Button("Save tailored version") { Task { await onCreateVersion() } }
                 }
                 Button("Save version and download PDF") { Task { await onDownload() } }
-                Button("Open official application") { Task { await onApply() } }
-                    .buttonStyle(.borderedProminent)
+                if canOpenListing {
+                    Button("Open official application") { Task { await onApply() } }
+                        .buttonStyle(.borderedProminent)
+                } else {
+                    Text("This pasted description has no external application URL.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .navigationTitle("Ready to apply?")
             .toolbar {

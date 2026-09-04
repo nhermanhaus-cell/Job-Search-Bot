@@ -3,7 +3,7 @@ import SwiftUI
 public struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.openURL) private var openURL
-    @AppStorage("backendURL") private var backendURL = "http://127.0.0.1:3000"
+    @AppStorage("backendURL") private var backendURL = "http://localhost:3000"
     @State private var maxYears = 6
     @State private var saved = false
     @State private var enabledSources = Set<String>()
@@ -17,7 +17,7 @@ public struct SettingsView: View {
             Form {
                 Section("Backend") {
                     TextField("Backend URL", text: $backendURL)
-                    Text("On iPhone, use your server or Mac LAN address—not 127.0.0.1.")
+                    Text("On a physical iPhone, use an HTTPS server or your Mac’s .local hostname—not loopback.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Save and reconnect") {
