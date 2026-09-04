@@ -57,7 +57,7 @@ public struct OnboardingView: View {
                 .foregroundStyle(.tint)
             Text("Upload every useful resume")
                 .font(.title2.bold())
-            Text("PDF, DOCX, or text. We merge unique experience and preserve which document each fact came from.")
+            Text("PDF, DOCX, or text. Original files are encrypted. We extract only facts already on the page and may send that text to a platform-managed OpenAI model. Gmail classification is optional and off until you connect it.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 520)

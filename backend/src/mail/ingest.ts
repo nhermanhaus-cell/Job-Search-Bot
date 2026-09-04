@@ -29,9 +29,19 @@ function shouldAutoApply(classified: ClassifiedMail): boolean {
   return classified.type !== "newsletter_ignore" && classified.confidence >= 0.8 && Boolean(classified.company);
 }
 
-export async function ingestPayload(profileId: string, payload: MailPayload): Promise<MailEvent> {
+export async function ingestPayload(
+  profileId: string,
+  payload: MailPayload,
+  mailAccountId?: string,
+): Promise<MailEvent> {
   const existing = await prisma.mailEvent.findUnique({
-    where: { provider_messageId: { provider: "gmail", messageId: payload.messageId } },
+    where: {
+      profileId_provider_messageId: {
+        profileId,
+        provider: "gmail",
+        messageId: payload.messageId,
+      },
+    },
   });
   if (existing) return existing;
 
@@ -76,6 +86,7 @@ export async function ingestPayload(profileId: string, payload: MailPayload): Pr
   return prisma.mailEvent.create({
     data: {
       profileId,
+      mailAccountId,
       applicationId,
       messageId: payload.messageId,
       threadId: payload.threadId,
@@ -97,11 +108,12 @@ export async function ingestPayload(profileId: string, payload: MailPayload): Pr
 }
 
 export async function reviewMailEvent(
+  profileId: string,
   id: string,
   action: "confirm" | "ignore",
   fields?: { company?: string; jobTitle?: string; classification?: string },
 ) {
-  const event = await prisma.mailEvent.findUnique({ where: { id } });
+  const event = await prisma.mailEvent.findFirst({ where: { id, profileId } });
   if (!event) throw new Error("Mail event not found");
   if (action === "ignore") {
     return prisma.mailEvent.update({

@@ -1,10 +1,10 @@
 import { Hono } from "hono";
-import { ensureProfile, prisma } from "../db.js";
+import { profileFor, prisma } from "../db.js";
 
 export const statsRoutes = new Hono();
 
 statsRoutes.get("/jobs", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const from = c.req.query("from");
   const since = from ? new Date(from) : new Date(Date.now() - 30 * 86_400_000);
   const matches = await prisma.match.findMany({

@@ -123,7 +123,9 @@ public struct TailorReviewView: View {
 
     private func downloadPacket() async {
         if !versionCreated { await createVersion() }
-        openURL(await store.client.packetURL(jobId: jobID))
+        if let url = try? await store.client.downloadPacket(jobId: jobID) {
+            openURL(url)
+        }
     }
 
     private func apply() async {

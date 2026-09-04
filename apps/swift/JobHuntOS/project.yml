@@ -16,13 +16,18 @@ targets:
     dependencies:
       - package: JobHuntOSPackage
         product: JobHuntUI
+    entitlements:
+      path: Support/JobHuntOS-iOS.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jobhuntos.app
+        CODE_SIGN_ENTITLEMENTS: Support/JobHuntOS-iOS.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: Job Hunt OS
         INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: true
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: Job Hunt OS connects to your selected job-search backend on the local network.
         INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        INFOPLIST_KEY_GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
+        INFOPLIST_KEY_CFBundleURLTypes: '[{cfbundlurlschemes: [jobhuntos, com.googleusercontent.apps.GOOGLE_IOS_CLIENT_ID]}]'
         GENERATE_INFOPLIST_FILE: true
   JobHuntOS-macOS:
     type: application
@@ -32,10 +37,14 @@ targets:
     dependencies:
       - package: JobHuntOSPackage
         product: JobHuntUI
+    entitlements:
+      path: Support/JobHuntOS-macOS.entitlements
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.jobhuntos.mac
+        CODE_SIGN_ENTITLEMENTS: Support/JobHuntOS-macOS.entitlements
         INFOPLIST_KEY_CFBundleDisplayName: Job Hunt OS
         INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: true
         INFOPLIST_KEY_NSLocalNetworkUsageDescription: Job Hunt OS connects to your selected job-search backend on the local network.
+        INFOPLIST_KEY_GIDClientID: $(GOOGLE_IOS_CLIENT_ID)
         GENERATE_INFOPLIST_FILE: true

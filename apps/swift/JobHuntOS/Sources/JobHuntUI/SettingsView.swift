@@ -1,21 +1,28 @@
+import JobHuntKit
 import SwiftUI
 
 public struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.openURL) private var openURL
+    #if DEBUG
     @AppStorage("backendURL") private var backendURL = "http://localhost:3000"
-    @State private var maxYears = 6
     @State private var saved = false
+    #endif
+    @State private var maxYears = 6
     @State private var enabledSources = Set<String>()
     @State private var mailPollMinutes = 15
-    @State private var openAIKey = ""
+    @State private var confirmDelete = false
+    @State private var working = false
 
     public init() {}
 
     public var body: some View {
         NavigationStack {
             Form {
-                Section("Backend") {
+                accountSection
+
+                #if DEBUG
+                Section("Backend (debug)") {
                     TextField("Backend URL", text: $backendURL)
                     Text("On a physical iPhone, use an HTTPS server or your Mac’s .local hostname—not loopback.")
                         .font(.caption)
@@ -29,6 +36,7 @@ public struct SettingsView: View {
                     }
                     if saved { Label("Saved", systemImage: "checkmark.circle").foregroundStyle(.green) }
                 }
+                #endif
 
                 Section("Matching") {
                     Stepper(
@@ -62,10 +70,16 @@ public struct SettingsView: View {
                         }
                     } else {
                         Button("Connect Gmail") {
-                            Task { openURL(await store.client.connectGmailURL()) }
+                            Task {
+                                do {
+                                    openURL(try await store.client.connectGmailURL())
+                                } catch {
+                                    store.error = error.localizedDescription
+                                }
+                            }
                         }
                     }
-                    Text("Gmail OAuth and OpenAI run on the backend. Tokens never live in this app.")
+                    Text("Gmail stays optional and server-side. Public launch waits on Google’s gmail.readonly verification.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -112,27 +126,20 @@ public struct SettingsView: View {
                     )
                 }
 
-                Section("OpenAI on the backend") {
+                Section("AI") {
                     if store.serverSettings?.secrets.openai == true {
-                        Label("API key configured", systemImage: "checkmark.shield")
+                        Label("Platform OpenAI key configured", systemImage: "checkmark.shield")
                             .foregroundStyle(.green)
-                        Button("Remove API key", role: .destructive) {
-                            Task {
-                                try? await store.client.removeOpenAIKey()
-                                await store.refresh()
-                            }
-                        }
                     } else {
-                        SecureField("sk-…", text: $openAIKey)
-                        Button("Save key to encrypted backend storage") {
-                            Task {
-                                try? await store.client.setOpenAIKey(openAIKey)
-                                openAIKey = ""
-                                await store.refresh()
-                            }
-                        }
-                        .disabled(openAIKey.isEmpty)
+                        Text("Resume parsing and mail classification use a platform-managed model. No personal API key is stored.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
+                }
+
+                Section("Legal") {
+                    Link("Privacy policy", destination: store.backendURL.appending(path: "privacy"))
+                    Link("Terms of use", destination: store.backendURL.appending(path: "terms"))
                 }
             }
             .formStyle(.grouped)
@@ -145,6 +152,51 @@ public struct SettingsView: View {
                 )
                 mailPollMinutes = store.serverSettings?.mailPollMinutes ?? 15
             }
+            .alert("Delete your account?", isPresented: $confirmDelete) {
+                Button("Delete everything", role: .destructive) {
+                    Task {
+                        working = true
+                        try? await store.deleteAccount()
+                        working = false
+                    }
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This revokes Apple, Google and Gmail access, shreds encrypted resumes, and deletes your hunt data. Type-safe confirmation is sent as DELETE.")
+            }
+        }
+    }
+
+    private var accountSection: some View {
+        Section("Account") {
+            if let user = store.session?.user {
+                LabeledContent("Signed in", value: user.email ?? user.name ?? user.id)
+                LabeledContent("Providers", value: user.providers.joined(separator: ", "))
+            }
+            if !(store.session?.user.providers.contains("apple") ?? false) {
+                Button("Link Apple") {
+                    Task { try? await store.link(provider: .apple) }
+                }
+            }
+            if !(store.session?.user.providers.contains("google") ?? false) {
+                Button("Link Google") {
+                    Task { try? await store.link(provider: .google) }
+                }
+            }
+            Button("Export my data") {
+                Task {
+                    if let url = try? await store.client.exportAccount() {
+                        openURL(url)
+                    }
+                }
+            }
+            Button("Log out") {
+                Task { await store.signOut() }
+            }
+            Button("Delete account", role: .destructive) {
+                confirmDelete = true
+            }
+            .disabled(working)
         }
     }
 }

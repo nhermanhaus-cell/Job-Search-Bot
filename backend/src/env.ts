@@ -43,6 +43,33 @@ export const env = {
   leverSites: optional("LEVER_SITES"),
   ashbyBoards: optional("ASHBY_BOARDS"),
   jobRefreshMs: Number(optional("JOB_REFRESH_MS", String(4 * 60 * 60 * 1000))),
+  nodeEnv: optional("NODE_ENV", "development"),
+  authJwtSecret: optional("AUTH_JWT_SECRET", "dev-only-auth-secret-change-me"),
+  authIssuer: optional("AUTH_ISSUER", "job-hunt-os"),
+  appleClientIds: optional("APPLE_CLIENT_IDS", "com.jobhuntos.app,com.jobhuntos.mac")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+  appleTeamId: optional("APPLE_TEAM_ID"),
+  appleKeyId: optional("APPLE_KEY_ID"),
+  applePrivateKey: optional("APPLE_PRIVATE_KEY").replace(/\\n/g, "\n"),
+  googleServerClientIds: optional("GOOGLE_SERVER_CLIENT_IDS", optional("GOOGLE_OAUTH_CLIENT_ID"))
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+  objectBucket: optional("BUCKET_NAME", "job-hunt-os"),
+  objectEndpoint: optional("AWS_ENDPOINT_URL_S3", "https://t3.storage.dev"),
+  objectRegion: optional("AWS_REGION", "auto"),
+  objectAccessKey: optional("AWS_ACCESS_KEY_ID"),
+  objectSecretKey: optional("AWS_SECRET_ACCESS_KEY"),
+  objectEncryptionKey: optional("OBJECT_ENCRYPTION_KEY", optional("MAIL_TOKEN_ENCRYPTION_KEY")),
+  dataDir: optional("DATA_DIR", resolve(root, ".data")),
+  sentryDsn: optional("SENTRY_DSN"),
+  allowedOrigins: optional("ALLOWED_ORIGINS")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
+  gmailPublicEnabled: optional("GMAIL_PUBLIC_ENABLED", "false") === "true",
 };
 
 export const googleRedirectUri = `${env.publicUrl.replace(/\/$/, "")}/api/mail/google/callback`;
@@ -53,3 +80,18 @@ export const gmailScopes = [
   "profile",
   "https://www.googleapis.com/auth/gmail.readonly",
 ];
+
+export function assertProductionEnv() {
+  if (env.nodeEnv !== "production") return;
+  const missing = [
+    ["AUTH_JWT_SECRET", env.authJwtSecret],
+    ["MAIL_TOKEN_ENCRYPTION_KEY", env.tokenKey],
+    ["OBJECT_ENCRYPTION_KEY", env.objectEncryptionKey],
+    ["BUCKET_NAME", env.objectBucket],
+    ["AWS_ACCESS_KEY_ID", env.objectAccessKey],
+    ["AWS_SECRET_ACCESS_KEY", env.objectSecretKey],
+  ].filter(([, value]) => !value || String(value).includes("dev-only"));
+  if (missing.length) {
+    throw new Error(`Missing required production secrets: ${missing.map(([name]) => name).join(", ")}`);
+  }
+}

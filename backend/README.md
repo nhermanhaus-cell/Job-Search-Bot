@@ -1,55 +1,43 @@
 # Job Hunt OS backend
 
-Hono + Prisma + SQLite. System of record for resume intake, title interests, provider search, job matching/tailoring, application charts, Gmail OAuth, and mail classification.
+Hono + Prisma + PostgreSQL. Multi-user system of record for Apple/Google auth, encrypted resume objects, provider search, matching/tailoring, application charts, and optional Gmail classification.
 
-## Classifier model
+## Run locally
 
-**Default: `gpt-4o-mini`** (`OPENAI_MODEL`).
-
-Mail labeling is a closed taxonomy (receipt / rejection / interview / offer / ignore). `gpt-4o-mini` is the right default for a SwiftUI + backend build:
-
-- Structured JSON output
-- Cheap enough to run on every new ATS thread
-- Fast enough that Sync does not stall the phone
-- Stays on the server so the Swift app never holds an OpenAI or Google token
-
-Deterministic rules run first. The model is only called when confidence is low **and** `OPENAI_API_KEY` is set. Swap with `OPENAI_MODEL=gpt-4.1-mini` (or later mini-class models) if interview-time extraction is weak — do not put a frontier model on this path.
-
-## Run
+Postgres is required (SQLite is no longer used):
 
 ```bash
+createdb jobhunt
 cd backend
-cp .env.example .env   # already present for local
+cp .env.example .env
 npm install
 npx prisma generate
-npx prisma db push
+npx prisma migrate deploy
 npm test
-npm run dev
+npm run dev          # web API
+npm run dev:worker   # parse / mail / deletion queue
 ```
 
-Open http://localhost:3000 — Connect Gmail, or **Load demo inbox** without Google keys.
+Open http://localhost:3000/api/health/live. Privacy and terms are at `/privacy` and `/terms`. The HTML dashboard is hidden when `NODE_ENV=production`.
 
-## Product APIs
+## Auth
 
-- `POST /api/profile/resumes` — multi-file PDF/DOCX/TXT intake
-- `GET/PATCH /api/profile` — merged background and preferences
-- `POST /api/profile/titles` — pinned role interests
-- `POST /api/search/sessions` + `/events` — parallel provider search over SSE
-- `GET /api/jobs` and `/api/jobs/:id` — matches and deep requirements
-- `POST /api/jobs/paste` — analyze a manually pasted JD
-- `PATCH /api/jobs/:id/suggestions/:suggestionId` — accept/reject/edit
-- `POST /api/jobs/:id/apply` — create the tracker row before opening the listing
-- `GET /api/stats/jobs` — match/difficulty chart rollups
-- `GET /api/sync` — Swift client refresh
+Native apps call:
 
-Demo, Remotive, and Remote OK need no source key. Adzuna and USAJobs are optional in `.env`.
+- `POST /api/auth/challenge` — one-use nonce
+- `POST /api/auth/exchange/apple|google` — signup, login, or authenticated link
+- `POST /api/auth/refresh` — rotating refresh tokens (reuse revokes the family)
+- `GET /api/auth/session`, `POST /api/auth/logout`
+- `GET /api/auth/export`, `DELETE /api/auth/account`
 
-## Connect Gmail
+Login never creates an account. Apple and Google are not auto-linked by email.
 
-1. Google Cloud project → enable Gmail API.
-2. OAuth client type **Web application**.
-3. Redirect URI: `http://localhost:3000/api/mail/google/callback` (or your `PUBLIC_URL`).
-4. Set `GOOGLE_OAUTH_CLIENT_ID` and `GOOGLE_OAUTH_CLIENT_SECRET`.
-5. Scope requested: `gmail.readonly` only.
+## Storage
 
-The worker polls every `MAIL_POLL_MS` (default 15 minutes) after a account is connected.
+Resumes and generated PDF packets are envelope-encrypted (AES-256-GCM data key wrapped by `OBJECT_ENCRYPTION_KEY`) and stored in Tigris in production, or `.data/objects` locally. `rawText` is not persisted. Account deletion crypto-shreds wrapped keys, then deletes the user prefix.
+
+## Fly
+
+See [fly.toml](../fly.toml): `web` is a stateless API; `worker` is a singleton with encrypted volume `jobhunt_worker_data` at `/data`. Secrets belong in `fly secrets`, never files.
+
+Gmail tracking is off in production until `GMAIL_PUBLIC_ENABLED=true` after Google restricted-scope verification.

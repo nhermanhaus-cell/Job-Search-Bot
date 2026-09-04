@@ -18,9 +18,15 @@ export async function syncMailAccount(accountId: string) {
         scanned += 1;
         const payload = await fetchMessage(account, id);
         const before = await prisma.mailEvent.findUnique({
-          where: { provider_messageId: { provider: "gmail", messageId: payload.messageId } },
+          where: {
+            profileId_provider_messageId: {
+              profileId: account.profileId,
+              provider: "gmail",
+              messageId: payload.messageId,
+            },
+          },
         });
-        await ingestPayload(account.profileId, payload);
+        await ingestPayload(account.profileId, payload, account.id);
         if (!before) ingested += 1;
       }
     } while (pageToken);

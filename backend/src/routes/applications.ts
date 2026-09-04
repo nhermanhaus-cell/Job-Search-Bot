@@ -1,10 +1,10 @@
 import { Hono } from "hono";
-import { prisma, ensureProfile } from "../db.js";
+import { prisma, profileFor } from "../db.js";
 
 export const applicationRoutes = new Hono();
 
 applicationRoutes.get("/", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const applications = await prisma.application.findMany({
     where: { profileId: profile.id },
     orderBy: { updatedAt: "desc" },
@@ -14,6 +14,7 @@ applicationRoutes.get("/", async (c) => {
 });
 
 applicationRoutes.patch("/:id", async (c) => {
+  const profile = await profileFor(c);
   const id = c.req.param("id");
   const body = await c.req.json<{
     status?: string;
@@ -21,8 +22,10 @@ applicationRoutes.patch("/:id", async (c) => {
     company?: string;
     jobTitle?: string;
   }>();
+  const owned = await prisma.application.findFirst({ where: { id, profileId: profile.id } });
+  if (!owned) return c.json({ error: "not found" }, 404);
   const application = await prisma.application.update({
-    where: { id },
+    where: { id: owned.id },
     data: {
       status: body.status,
       notes: body.notes,
@@ -35,7 +38,7 @@ applicationRoutes.patch("/:id", async (c) => {
 });
 
 applicationRoutes.get("/stats", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const applications = await prisma.application.findMany({ where: { profileId: profile.id } });
   const byStatus: Record<string, number> = {};
   for (const app of applications) {

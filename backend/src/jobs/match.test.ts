@@ -24,6 +24,7 @@ describe("scoreJob", () => {
     const scored = scoreJob(
       {
         id: "local",
+        userId: "local-user",
         name: null,
         email: null,
         location: "Remote",

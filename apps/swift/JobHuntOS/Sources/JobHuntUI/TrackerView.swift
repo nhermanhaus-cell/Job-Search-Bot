@@ -57,7 +57,11 @@ public struct TrackerView: View {
                 Text("Connect Gmail so receipts, rejections, and interview requests update this tracker.")
                     .foregroundStyle(.secondary)
                 Button("Connect Gmail") {
-                    Task { openURL(await store.client.connectGmailURL()) }
+                    Task {
+                        if let url = try? await store.client.connectGmailURL() {
+                            openURL(url)
+                        }
+                    }
                 }
                 .buttonStyle(.borderedProminent)
             }

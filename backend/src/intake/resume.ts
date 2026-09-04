@@ -23,20 +23,23 @@ export type ParsedResume = {
   titleSuggestions: { title: string; reason: string }[];
 };
 
-export async function extractResumeText(file: File): Promise<string> {
-  const bytes = Buffer.from(await file.arrayBuffer());
-  const name = file.name.toLowerCase();
-  if (name.endsWith(".pdf") || file.type === "application/pdf") {
+export async function extractResumeBytes(bytes: Buffer, fileName: string, mediaType = ""): Promise<string> {
+  const name = fileName.toLowerCase();
+  if (name.endsWith(".pdf") || mediaType === "application/pdf" || bytes.subarray(0, 5).toString("utf8") === "%PDF-") {
     const result = await extractText(new Uint8Array(bytes), { mergePages: true });
     return result.text;
   }
   if (
     name.endsWith(".docx") ||
-    file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    mediaType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
     return (await mammoth.extractRawText({ buffer: bytes })).value;
   }
   return bytes.toString("utf8");
+}
+
+export async function extractResumeText(file: File): Promise<string> {
+  return extractResumeBytes(Buffer.from(await file.arrayBuffer()), file.name, file.type);
 }
 
 export async function parseResume(text: string): Promise<ParsedResume> {

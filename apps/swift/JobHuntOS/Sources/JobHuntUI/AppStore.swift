@@ -2,8 +2,17 @@ import Foundation
 import JobHuntKit
 import SwiftUI
 
+public enum AppPhase: Equatable {
+    case bootstrapping
+    case unauthenticated
+    case onboarding
+    case main
+}
+
 @MainActor
 public final class AppStore: ObservableObject {
+    @Published public var phase: AppPhase = .bootstrapping
+    @Published public var session: AuthSession?
     @Published public var profile: Profile?
     @Published public var jobs: [Job] = []
     @Published public var applications: [Application] = []
@@ -18,26 +27,131 @@ public final class AppStore: ObservableObject {
     @Published public var searchRunning = false
     @Published public var selectedDifficulty: Difficulty?
     @Published public var error: String?
+    @Published public var backendURL: URL
 
     public private(set) var client: APIClient
     private let cache = OfflineCache()
+    private let apple = AppleSignInCoordinator()
 
     public init() {
+        #if DEBUG
         let configured = UserDefaults.standard.string(forKey: "backendURL")
-            .flatMap(URL.init(string:)) ?? URL(string: "http://localhost:3000")!
+            .flatMap(URL.init(string:)) ?? APIClient.defaultBaseURL
+        #else
+        let configured = APIClient.defaultBaseURL
+        #endif
+        backendURL = configured
         client = APIClient(baseURL: configured)
-        jobs = cache.load([Job].self, key: "jobs") ?? []
-        applications = cache.load([Application].self, key: "applications") ?? []
-        mailEvents = cache.load([MailEvent].self, key: "mailEvents") ?? []
-        profile = cache.load(Profile.self, key: "profile")
     }
 
     public func configure(baseURL: URL) {
+        #if DEBUG
         UserDefaults.standard.set(baseURL.absoluteString, forKey: "backendURL")
+        backendURL = baseURL
         client = APIClient(baseURL: baseURL)
+        #endif
+    }
+
+    public func bootstrap() async {
+        phase = .bootstrapping
+        do {
+            let session = try await client.validateStoredSession()
+            apply(session: session)
+            await refresh()
+        } catch {
+            clearLocalSession()
+            phase = .unauthenticated
+        }
+    }
+
+    public func authenticate(provider: AuthProvider, intent: AuthIntent) async throws {
+        let challenge = try await client.authChallenge(provider: provider, intent: intent)
+        let identityToken: String
+        var authorizationCode: String?
+        var fullName: String?
+        switch provider {
+        case .apple:
+            let apple = try await apple.signIn(nonce: challenge.nonce)
+            identityToken = apple.identityToken
+            authorizationCode = apple.authorizationCode
+            fullName = apple.fullName
+        case .google:
+            identityToken = try await GoogleSignInCoordinator.signIn(nonce: challenge.nonce)
+        }
+        let session = try await client.exchangeIdentity(
+            provider: provider,
+            challengeId: challenge.challengeId,
+            identityToken: identityToken,
+            authorizationCode: authorizationCode,
+            fullName: fullName
+        )
+        apply(session: session)
+        await refresh()
+    }
+
+    public func link(provider: AuthProvider) async throws {
+        let challenge = try await client.authChallenge(provider: provider, intent: .link)
+        let identityToken: String
+        var authorizationCode: String?
+        switch provider {
+        case .apple:
+            let apple = try await apple.signIn(nonce: challenge.nonce)
+            identityToken = apple.identityToken
+            authorizationCode = apple.authorizationCode
+        case .google:
+            identityToken = try await GoogleSignInCoordinator.signIn(nonce: challenge.nonce)
+        }
+        try await client.linkIdentity(
+            provider: provider,
+            challengeId: challenge.challengeId,
+            identityToken: identityToken,
+            authorizationCode: authorizationCode
+        )
+        if let updated = try? await client.validateStoredSession() {
+            apply(session: updated)
+        }
+    }
+
+    public func signOut() async {
+        let userId = session?.user.id
+        await client.logout()
+        if let userId { cache.removeAll(for: userId) }
+        clearLocalSession()
+        phase = .unauthenticated
+    }
+
+    public func deleteAccount() async throws {
+        let userId = session?.user.id
+        try await client.deleteAccount()
+        if let userId { cache.removeAll(for: userId) }
+        clearLocalSession()
+        phase = .unauthenticated
+    }
+
+    private func apply(session: AuthSession) {
+        self.session = session
+        cache.userId = session.user.id
+        jobs = cache.load([Job].self, key: "jobs") ?? jobs
+        applications = cache.load([Application].self, key: "applications") ?? applications
+        mailEvents = cache.load([MailEvent].self, key: "mailEvents") ?? mailEvents
+        profile = cache.load(Profile.self, key: "profile") ?? profile
+        phase = session.onboardingDone ? .main : .onboarding
+    }
+
+    private func clearLocalSession() {
+        session = nil
+        profile = nil
+        jobs = []
+        applications = []
+        mailEvents = []
+        mailStatus = nil
+        applicationStats = nil
+        jobStats = nil
+        cache.userId = nil
     }
 
     public func refresh() async {
+        guard phase == .main || phase == .onboarding else { return }
         do {
             let client = self.client
             let difficulty = selectedDifficulty
@@ -63,7 +177,13 @@ public final class AppStore: ObservableObject {
             cache.save(jobs, key: "jobs")
             cache.save(applications, key: "applications")
             cache.save(mailEvents, key: "mailEvents")
+            if let onboardingDone = profile?.onboardingDone {
+                session?.onboardingDone = onboardingDone
+                phase = onboardingDone ? .main : .onboarding
+            }
             error = nil
+        } catch let auth as AuthError where auth == .sessionExpired || auth == .unauthenticated {
+            await signOut()
         } catch {
             self.error = error.localizedDescription
         }
@@ -125,6 +245,9 @@ public final class AppStore: ObservableObject {
                 maxYearsRequired: maxYearsRequired,
                 onboardingDone: true
             )
+            session?.onboardingDone = true
+            phase = .main
+            await refresh()
         } catch {
             self.error = error.localizedDescription
         }

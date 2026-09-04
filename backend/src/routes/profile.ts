@@ -1,6 +1,14 @@
+import { bodyLimit } from "hono/body-limit";
 import { Hono } from "hono";
-import { ensureProfile, prisma } from "../db.js";
-import { adjacentTitles, extractResumeText, parseResume } from "../intake/resume.js";
+import { profileFor, prisma } from "../db.js";
+import { env } from "../env.js";
+import { applyParsedResume } from "../intake/apply.js";
+import { detectResumeMedia } from "../intake/magic.js";
+import { extractResumeBytes, parseResume } from "../intake/resume.js";
+import { completeJob, enqueue } from "../queue/index.js";
+import { handleParseResume } from "../queue/handlers.js";
+import { putEncryptedObject } from "../storage/index.js";
+import { assertQuota, quotaErrorResponse, recordUsage } from "../usage.js";
 
 export const profileRoutes = new Hono();
 
@@ -13,7 +21,7 @@ function json<T>(value: string, fallback: T): T {
 }
 
 profileRoutes.get("/", async (c) => {
-  const base = await ensureProfile();
+  const base = await profileFor(c);
   const profile = await prisma.profile.findUniqueOrThrow({
     where: { id: base.id },
     include: {
@@ -48,7 +56,7 @@ profileRoutes.get("/", async (c) => {
 });
 
 profileRoutes.patch("/", async (c) => {
-  const base = await ensureProfile();
+  const base = await profileFor(c);
   const body = await c.req.json<{
     name?: string;
     email?: string;
@@ -71,8 +79,23 @@ profileRoutes.patch("/", async (c) => {
   return c.json({ profile });
 });
 
+profileRoutes.use(
+  "/resumes",
+  bodyLimit({
+    maxSize: 12 * 1024 * 1024,
+    onError: (c) => c.json({ error: "file_too_large" }, 413),
+  }),
+);
+
 profileRoutes.post("/resumes", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
+  try {
+    await assertQuota(profile.id, "parse");
+  } catch (error) {
+    const quota = quotaErrorResponse(error);
+    if (quota) return c.json(quota, 429);
+    throw error;
+  }
   const body = await c.req.parseBody({ all: true });
   const rawFiles = body.files;
   const files = (Array.isArray(rawFiles) ? rawFiles : rawFiles ? [rawFiles] : []).filter(
@@ -82,134 +105,72 @@ profileRoutes.post("/resumes", async (c) => {
 
   const results = [];
   for (const file of files) {
-    const rawText = await extractResumeText(file);
-    const parsed = await parseResume(rawText);
+    const bytes = Buffer.from(await file.arrayBuffer());
+    const media = detectResumeMedia(file.name, bytes);
+    if (!media) return c.json({ error: `unsupported_or_invalid_file:${file.name}` }, 400);
+
+    const stored = await putEncryptedObject({
+      profileId: profile.id,
+      kind: "resume",
+      originalName: file.name,
+      contentType: media.mediaType,
+      bytes,
+    });
     const document = await prisma.resumeDocument.create({
       data: {
         profileId: profile.id,
+        objectId: stored.id,
         fileName: file.name,
-        mediaType: file.type || "text/plain",
-        rawText,
-        parseJson: JSON.stringify(parsed),
+        mediaType: media.mediaType,
+        parseJson: "{}",
+        parseStatus: "queued",
       },
     });
+    const job = await enqueue(
+      "parse_resume",
+      { documentId: document.id, profileId: profile.id },
+      { profileId: profile.id, dedupeKey: `parse:${document.id}` },
+    );
+    await recordUsage(profile.id, "parse");
 
-    await prisma.profile.update({
-      where: { id: profile.id },
-      data: {
-        name: parsed.name ?? undefined,
-        email: parsed.email ?? undefined,
-        location: parsed.location ?? undefined,
-        summary: parsed.summary ?? undefined,
-      },
-    });
-
-    for (const item of parsed.experiences) {
-      const existing = await prisma.experienceItem.findFirst({
-        where: {
-          profileId: profile.id,
-          company: { equals: item.company },
-          title: { equals: item.title },
-        },
-      });
-      if (existing) {
-        const bullets = [
-          ...new Set([...json<string[]>(existing.bulletsJson, []), ...item.bullets]),
-        ];
-        const sourceIds = [
-          ...new Set([...json<string[]>(existing.sourceDocumentIds, []), document.id]),
-        ];
-        for (const [field, oldValue, newValue] of [
-          ["startDate", existing.startDate, item.startDate],
-          ["endDate", existing.endDate, item.endDate],
-        ] as const) {
-          if (oldValue && newValue && oldValue !== newValue) {
-            const duplicate = await prisma.profileConflict.findFirst({
-              where: {
-                profileId: profile.id,
-                field: `experience.${existing.id}.${field}`,
-                status: "pending",
-              },
-            });
-            if (!duplicate) {
-              await prisma.profileConflict.create({
-                data: {
-                  profileId: profile.id,
-                  field: `experience.${existing.id}.${field}`,
-                  message: `${item.title} at ${item.company} has conflicting ${field === "startDate" ? "start" : "end"} dates.`,
-                  optionsJson: JSON.stringify([oldValue, newValue]),
-                },
-              });
-            }
-          }
+    if (env.nodeEnv !== "production") {
+      try {
+        if (process.env.INLINE_PARSE !== "0") {
+          const rawText = await extractResumeBytes(bytes, file.name, media.mediaType);
+          const parsed = await parseResume(rawText);
+          await applyParsedResume(profile.id, document.id, parsed);
+          await prisma.resumeDocument.update({
+            where: { id: document.id },
+            data: { parseJson: JSON.stringify(parsed), parseStatus: "ready", rawText: null },
+          });
+          await completeJob(job.id);
+          results.push({ documentId: document.id, fileName: file.name, parsed, parseStatus: "ready" });
+          continue;
         }
-        await prisma.experienceItem.update({
-          where: { id: existing.id },
-          data: {
-            bulletsJson: JSON.stringify(bullets),
-            sourceDocumentIds: JSON.stringify(sourceIds),
-            startDate: existing.startDate ?? item.startDate,
-            endDate: existing.endDate ?? item.endDate,
-          },
+        await handleParseResume({
+          id: job.id,
+          type: "parse_resume",
+          profileId: profile.id,
+          payloadJson: job.payloadJson,
+          attempts: 1,
+          maxAttempts: 5,
         });
-      } else {
-        await prisma.experienceItem.create({
-          data: {
-            profileId: profile.id,
-            company: item.company,
-            title: item.title,
-            startDate: item.startDate,
-            endDate: item.endDate,
-            location: item.location,
-            bulletsJson: JSON.stringify(item.bullets),
-            sourceDocumentIds: JSON.stringify([document.id]),
-          },
+        await completeJob(job.id);
+      } catch (error) {
+        await prisma.resumeDocument.update({
+          where: { id: document.id },
+          data: { parseStatus: "error" },
         });
+        throw error;
       }
     }
-
-    for (const name of parsed.skills) {
-      if (!name.trim()) continue;
-      await prisma.skill.upsert({
-        where: { profileId_name: { profileId: profile.id, name: name.trim() } },
-        create: {
-          profileId: profile.id,
-          name: name.trim(),
-          sourceDocumentIds: JSON.stringify([document.id]),
-        },
-        update: {},
-      });
-    }
-
-    const titleCandidates = [
-      ...parsed.titleSuggestions,
-      ...parsed.experiences.flatMap((item) =>
-        adjacentTitles(item.title).map((title) => ({
-          title,
-          reason: `Adjacent to your ${item.title} experience`,
-        })),
-      ),
-    ];
-    for (const candidate of titleCandidates) {
-      await prisma.titleInterest.upsert({
-        where: { profileId_title: { profileId: profile.id, title: candidate.title } },
-        create: {
-          profileId: profile.id,
-          title: candidate.title,
-          reason: candidate.reason,
-          pinned: false,
-          source: "suggested",
-        },
-        update: {},
-      });
-    }
-    results.push({ documentId: document.id, fileName: file.name, parsed });
+    results.push({ documentId: document.id, fileName: file.name, parseStatus: "queued" });
   }
   return c.json({ results }, 201);
 });
 
 profileRoutes.post("/titles", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const body = await c.req.json<{ title: string; pinned?: boolean; reason?: string }>();
   if (!body.title?.trim()) return c.json({ error: "title required" }, 400);
   const interest = await prisma.titleInterest.upsert({
@@ -227,21 +188,27 @@ profileRoutes.post("/titles", async (c) => {
 });
 
 profileRoutes.patch("/titles/:id", async (c) => {
+  const profile = await profileFor(c);
   const body = await c.req.json<{ pinned?: boolean; title?: string }>();
+  const owned = await prisma.titleInterest.findFirst({
+    where: { id: c.req.param("id"), profileId: profile.id },
+  });
+  if (!owned) return c.json({ error: "not found" }, 404);
   const interest = await prisma.titleInterest.update({
-    where: { id: c.req.param("id") },
+    where: { id: owned.id },
     data: body,
   });
   return c.json({ interest });
 });
 
 profileRoutes.delete("/titles/:id", async (c) => {
-  await prisma.titleInterest.delete({ where: { id: c.req.param("id") } });
+  const profile = await profileFor(c);
+  await prisma.titleInterest.deleteMany({ where: { id: c.req.param("id"), profileId: profile.id } });
   return c.json({ ok: true });
 });
 
 profileRoutes.post("/experience", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const body = await c.req.json<{
     company: string;
     title: string;
@@ -266,6 +233,7 @@ profileRoutes.post("/experience", async (c) => {
 });
 
 profileRoutes.patch("/experience/:id", async (c) => {
+  const profile = await profileFor(c);
   const body = await c.req.json<{
     company?: string;
     title?: string;
@@ -275,8 +243,12 @@ profileRoutes.patch("/experience/:id", async (c) => {
     bullets?: string[];
   }>();
   const { bullets, ...fields } = body;
+  const owned = await prisma.experienceItem.findFirst({
+    where: { id: c.req.param("id"), profileId: profile.id },
+  });
+  if (!owned) return c.json({ error: "not found" }, 404);
   const item = await prisma.experienceItem.update({
-    where: { id: c.req.param("id") },
+    where: { id: owned.id },
     data: {
       ...fields,
       bulletsJson: bullets ? JSON.stringify(bullets) : undefined,
@@ -286,12 +258,13 @@ profileRoutes.patch("/experience/:id", async (c) => {
 });
 
 profileRoutes.delete("/experience/:id", async (c) => {
-  await prisma.experienceItem.delete({ where: { id: c.req.param("id") } });
+  const profile = await profileFor(c);
+  await prisma.experienceItem.deleteMany({ where: { id: c.req.param("id"), profileId: profile.id } });
   return c.json({ ok: true });
 });
 
 profileRoutes.post("/skills", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const body = await c.req.json<{ name: string }>();
   const skill = await prisma.skill.upsert({
     where: { profileId_name: { profileId: profile.id, name: body.name.trim() } },
@@ -302,18 +275,22 @@ profileRoutes.post("/skills", async (c) => {
 });
 
 profileRoutes.delete("/skills/:id", async (c) => {
-  await prisma.skill.delete({ where: { id: c.req.param("id") } });
+  const profile = await profileFor(c);
+  await prisma.skill.deleteMany({ where: { id: c.req.param("id"), profileId: profile.id } });
   return c.json({ ok: true });
 });
 
 profileRoutes.post("/conflicts/:id/resolve", async (c) => {
+  const profile = await profileFor(c);
   const body = await c.req.json<{ value: string }>();
-  const conflict = await prisma.profileConflict.findUnique({ where: { id: c.req.param("id") } });
+  const conflict = await prisma.profileConflict.findFirst({
+    where: { id: c.req.param("id"), profileId: profile.id },
+  });
   if (!conflict) return c.json({ error: "not found" }, 404);
   const [, experienceId, field] = conflict.field.split(".");
   if (experienceId && (field === "startDate" || field === "endDate")) {
-    await prisma.experienceItem.update({
-      where: { id: experienceId },
+    await prisma.experienceItem.updateMany({
+      where: { id: experienceId, profileId: profile.id },
       data: field === "startDate" ? { startDate: body.value } : { endDate: body.value },
     });
   }

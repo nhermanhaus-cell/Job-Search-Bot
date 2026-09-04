@@ -1,0 +1,7 @@
+backend/node_modules
+backend/.data
+backend/.env
+backend/dist
+.git
+apps
+docs

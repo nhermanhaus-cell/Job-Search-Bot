@@ -3,71 +3,146 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:../.data/app.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_DATABASE_URL")
+}
+
+model User {
+  id                String            @id @default(cuid())
+  email             String?
+  name              String?
+  status            String            @default("active")
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  identities        AuthIdentity[]
+  sessions          Session[]
+  challenges        AuthChallenge[]
+  profile           Profile?
+}
+
+model AuthIdentity {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider            String
+  subject             String
+  email               String?
+  emailVerified       Boolean  @default(false)
+  providerRefreshEnc  String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([provider, subject])
+  @@index([userId])
+}
+
+model AuthChallenge {
+  id         String    @id @default(cuid())
+  userId     String?
+  user       User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider   String
+  intent     String
+  nonceHash  String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+model Session {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId    String
+  tokenHash   String    @unique
+  parentId    String?
+  expiresAt   DateTime
+  consumedAt  DateTime?
+  revokedAt   DateTime?
+  userAgent   String?
+  ipAddress   String?
+  createdAt   DateTime  @default(now())
+  lastUsedAt  DateTime  @default(now())
+
+  @@index([userId, familyId])
+  @@index([expiresAt])
 }
 
 model Profile {
-  id               String   @id @default("local")
-  name             String?
-  email            String?
-  location         String?
-  remotePreference String?
-  maxYearsRequired Int?
-  summary          String?
-  enabledSourcesJson String @default("[\"demo\",\"remotive\",\"remoteok\"]")
-  mailPollMinutes  Int      @default(15)
-  onboardingDone   Boolean  @default(false)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name               String?
+  email              String?
+  location           String?
+  remotePreference   String?
+  maxYearsRequired   Int?
+  summary            String?
+  enabledSourcesJson String   @default("[\"demo\",\"remotive\",\"remoteok\"]")
+  mailPollMinutes    Int      @default(15)
+  onboardingDone     Boolean  @default(false)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
-  mailAccounts      MailAccount[]
   applications      Application[]
-  mailEvents        MailEvent[]
-  resumeDocuments   ResumeDocument[]
   experienceItems   ExperienceItem[]
-  skills            Skill[]
-  titleInterests    TitleInterest[]
-  searchSessions    SearchSession[]
+  mailAccounts      MailAccount[]
+  mailEvents        MailEvent[]
   matches           Match[]
-  resumeVersions    ResumeVersion[]
   profileConflicts  ProfileConflict[]
+  resumeDocuments   ResumeDocument[]
+  resumeVersions    ResumeVersion[]
+  searchSessions    SearchSession[]
   serverSecrets     ServerSecret[]
+  skills            Skill[]
+  storedObjects     StoredObject[]
+  suggestions       EditSuggestion[]
+  titleInterests    TitleInterest[]
+  usageRecords      UsageRecord[]
 }
 
-model ServerSecret {
-  id        String   @id @default(cuid())
-  profileId String
-  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  name      String
-  valueEnc  String
-  updatedAt DateTime @updatedAt
+model StoredObject {
+  id                String   @id @default(cuid())
+  profileId         String
+  profile           Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  bucket            String
+  objectKey         String   @unique
+  kind              String
+  originalName      String?
+  contentType       String
+  byteSize          Int
+  checksumSha256    String
+  wrappedKey        String
+  wrappedKeyIv      String
+  wrappedKeyTag     String
+  objectIv          String
+  objectTag         String
+  keyVersion        Int      @default(1)
+  status            String   @default("ready")
+  createdAt         DateTime @default(now())
+  deletedAt         DateTime?
+  resumeDocument    ResumeDocument?
+  resumeVersion     ResumeVersion?
 
-  @@unique([profileId, name])
-}
-
-model ProfileConflict {
-  id            String   @id @default(cuid())
-  profileId     String
-  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  field         String
-  message       String
-  optionsJson   String
-  resolvedValue String?
-  status        String   @default("pending")
-  createdAt     DateTime @default(now())
+  @@index([profileId, kind])
 }
 
 model ResumeDocument {
-  id          String   @id @default(cuid())
-  profileId   String
-  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  fileName    String
-  mediaType   String
-  rawText     String
-  parseJson   String
-  parseStatus String   @default("parsed")
-  uploadedAt  DateTime @default(now())
+  id           String        @id @default(cuid())
+  profileId    String
+  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  objectId     String?       @unique
+  object       StoredObject? @relation(fields: [objectId], references: [id], onDelete: SetNull)
+  fileName     String
+  mediaType    String
+  rawText      String?
+  parseJson    String
+  parseStatus  String        @default("queued")
+  uploadedAt   DateTime      @default(now())
+
+  @@index([profileId, uploadedAt])
 }
 
 model ExperienceItem {
@@ -112,6 +187,31 @@ model TitleInterest {
   @@unique([profileId, title])
 }
 
+model ProfileConflict {
+  id            String   @id @default(cuid())
+  profileId     String
+  profile       Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  field         String
+  message       String
+  optionsJson   String
+  resolvedValue String?
+  status        String   @default("pending")
+  createdAt     DateTime @default(now())
+
+  @@index([profileId, status])
+}
+
+model ServerSecret {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name      String
+  valueEnc  String
+  updatedAt DateTime @updatedAt
+
+  @@unique([profileId, name])
+}
+
 model SearchSession {
   id          String   @id @default(cuid())
   profileId   String
@@ -123,17 +223,19 @@ model SearchSession {
   createdAt   DateTime @default(now())
   completedAt DateTime?
   sourceRuns  SearchSourceRun[]
+
+  @@index([profileId, createdAt])
 }
 
 model SearchSourceRun {
-  id         String        @id @default(cuid())
-  sessionId  String
-  session    SearchSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  source     String
-  status     String        @default("queued")
-  resultCount Int          @default(0)
-  error      String?
-  startedAt  DateTime?
+  id          String        @id @default(cuid())
+  sessionId   String
+  session     SearchSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  source      String
+  status      String        @default("queued")
+  resultCount Int           @default(0)
+  error       String?
+  startedAt   DateTime?
   completedAt DateTime?
 
   @@unique([sessionId, source])
@@ -186,6 +288,8 @@ model Match {
 
 model EditSuggestion {
   id         String   @id @default(cuid())
+  profileId  String
+  profile    Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
   jobId      String
   job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
   kind       String
@@ -195,34 +299,41 @@ model EditSuggestion {
   rationale  String
   status     String   @default("pending")
   createdAt  DateTime @default(now())
+
+  @@index([profileId, jobId])
 }
 
 model ResumeVersion {
-  id          String   @id @default(cuid())
-  profileId   String
-  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
-  jobId       String?
-  job         Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
-  contentJson String
-  status      String   @default("draft")
-  createdAt   DateTime @default(now())
+  id           String        @id @default(cuid())
+  profileId    String
+  profile      Profile       @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  jobId        String?
+  job          Job?          @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  packetObjectId String?      @unique
+  packetObject StoredObject? @relation(fields: [packetObjectId], references: [id], onDelete: SetNull)
+  contentJson  String
+  status       String        @default("draft")
+  createdAt    DateTime      @default(now())
+
+  @@index([profileId, createdAt])
 }
 
 model MailAccount {
-  id                String    @id @default(cuid())
-  profileId         String
-  profile           Profile   @relation(fields: [profileId], references: [id])
-  provider          String    @default("gmail")
-  email             String
-  refreshTokenEnc   String
-  accessTokenEnc    String?
-  accessTokenExp    DateTime?
-  historyId         String?
-  watchExpiresAt    DateTime?
-  lastSyncAt        DateTime?
-  lastError         String?
-  connectedAt       DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  profileId       String
+  profile         Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  provider        String    @default("gmail")
+  email           String
+  refreshTokenEnc String
+  accessTokenEnc  String?
+  accessTokenExp  DateTime?
+  historyId       String?
+  watchExpiresAt  DateTime?
+  lastSyncAt      DateTime?
+  lastError       String?
+  connectedAt     DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  events          MailEvent[]
 
   @@unique([profileId, provider, email])
 }
@@ -230,7 +341,7 @@ model MailAccount {
 model Application {
   id          String    @id @default(cuid())
   profileId   String
-  profile     Profile   @relation(fields: [profileId], references: [id])
+  profile     Profile   @relation(fields: [profileId], references: [id], onDelete: Cascade)
   company     String
   jobTitle    String?
   status      String    @default("submitted")
@@ -252,9 +363,11 @@ model Application {
 model MailEvent {
   id             String       @id @default(cuid())
   profileId      String
-  profile        Profile      @relation(fields: [profileId], references: [id])
+  profile        Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  mailAccountId  String?
+  mailAccount    MailAccount? @relation(fields: [mailAccountId], references: [id], onDelete: Cascade)
   applicationId  String?
-  application    Application? @relation(fields: [applicationId], references: [id])
+  application    Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
   provider       String       @default("gmail")
   messageId      String
   threadId       String?
@@ -274,6 +387,63 @@ model MailEvent {
   createdAt      DateTime     @default(now())
   updatedAt      DateTime     @updatedAt
 
-  @@unique([provider, messageId])
+  @@unique([profileId, provider, messageId])
   @@index([profileId, reviewState])
+}
+
+model UsageRecord {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  kind      String
+  units     Int      @default(1)
+  createdAt DateTime @default(now())
+
+  @@index([profileId, kind, createdAt])
+}
+
+model JobQueue {
+  id          String    @id @default(cuid())
+  type        String
+  profileId   String?
+  payloadJson String
+  dedupeKey   String?   @unique
+  status      String    @default("queued")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  runAt       DateTime  @default(now())
+  lockedAt    DateTime?
+  lockedBy    String?
+  lastError   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, runAt])
+}
+
+model OAuthState {
+  id         String    @id @default(cuid())
+  profileId  String
+  purpose    String
+  stateHash  String    @unique
+  redirectTo String?
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([expiresAt])
+}
+
+model DeletionRequest {
+  id          String    @id @default(cuid())
+  userId      String
+  profileId   String
+  status      String    @default("queued")
+  attempts    Int       @default(0)
+  lastError   String?
+  requestedAt DateTime  @default(now())
+  completedAt DateTime?
+
+  @@index([status, requestedAt])
+  @@index([userId])
 }

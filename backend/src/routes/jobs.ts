@@ -1,9 +1,11 @@
 import { createHash } from "node:crypto";
 import { Hono } from "hono";
-import { ensureProfile, prisma } from "../db.js";
+import { profileFor, prisma } from "../db.js";
 import { deepRead } from "../jobs/match.js";
 import { storeAndMatch } from "../jobs/search.js";
 import { renderResumePdf } from "../resume/pdf.js";
+import { getDecryptedObject, putEncryptedObject } from "../storage/index.js";
+import { assertQuota, quotaErrorResponse, recordUsage } from "../usage.js";
 
 export const jobRoutes = new Hono();
 
@@ -30,19 +32,19 @@ function shapeJob(job: Awaited<ReturnType<typeof loadJob>>) {
   };
 }
 
-function loadJob(id: string) {
+function loadJob(profileId: string, id: string) {
   return prisma.job.findUnique({
     where: { id },
     include: {
-      matches: true,
-      suggestions: { orderBy: { createdAt: "asc" } },
-      resumeVersions: { orderBy: { createdAt: "desc" } },
+      matches: { where: { profileId } },
+      suggestions: { where: { profileId }, orderBy: { createdAt: "asc" } },
+      resumeVersions: { where: { profileId }, orderBy: { createdAt: "desc" } },
     },
   });
 }
 
 jobRoutes.get("/", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const difficulty = c.req.query("difficulty");
   const matches = await prisma.match.findMany({
     where: {
@@ -77,7 +79,7 @@ jobRoutes.get("/", async (c) => {
 });
 
 jobRoutes.post("/paste", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const body = await c.req.json<{
     title: string;
     company?: string;
@@ -98,14 +100,15 @@ jobRoutes.post("/paste", async (c) => {
 });
 
 jobRoutes.get("/:id", async (c) => {
-  const job = await loadJob(c.req.param("id"));
+  const profile = await profileFor(c);
+  const job = await loadJob(profile.id, c.req.param("id"));
   if (!job) return c.json({ error: "not found" }, 404);
-  if (!job.suggestions.length) await ensureSuggestions(job.id);
-  return c.json({ job: shapeJob(await loadJob(job.id)) });
+  if (!job.suggestions.length) await ensureSuggestions(profile.id, job.id);
+  return c.json({ job: shapeJob(await loadJob(profile.id, job.id)) });
 });
 
 jobRoutes.patch("/:id/match", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const body = await c.req.json<{ difficulty?: string; hidden?: boolean }>();
   const match = await prisma.match.update({
     where: { profileId_jobId: { profileId: profile.id, jobId: c.req.param("id") } },
@@ -118,17 +121,22 @@ jobRoutes.patch("/:id/match", async (c) => {
 });
 
 jobRoutes.patch("/:id/suggestions/:suggestionId", async (c) => {
+  const profile = await profileFor(c);
   const body = await c.req.json<{ status: "accepted" | "rejected" | "pending"; afterText?: string }>();
+  const owned = await prisma.editSuggestion.findFirst({
+    where: { id: c.req.param("suggestionId"), jobId: c.req.param("id"), profileId: profile.id },
+  });
+  if (!owned) return c.json({ error: "not found" }, 404);
   const suggestion = await prisma.editSuggestion.update({
-    where: { id: c.req.param("suggestionId") },
+    where: { id: owned.id },
     data: { status: body.status, afterText: body.afterText },
   });
   return c.json({ suggestion });
 });
 
 jobRoutes.post("/:id/resume-versions", async (c) => {
-  const profile = await ensureProfile();
-  const job = await loadJob(c.req.param("id"));
+  const profile = await profileFor(c);
+  const job = await loadJob(profile.id, c.req.param("id"));
   if (!job) return c.json({ error: "not found" }, 404);
   const body: { status?: string } = await c.req.json<{ status?: string }>().catch(() => ({}));
   const experience = await prisma.experienceItem.findMany({ where: { profileId: profile.id } });
@@ -167,10 +175,17 @@ jobRoutes.post("/:id/resume-versions", async (c) => {
 });
 
 jobRoutes.get("/:id/packet", async (c) => {
-  const profile = await ensureProfile();
-  const job = await loadJob(c.req.param("id"));
+  const profile = await profileFor(c);
+  try {
+    await assertQuota(profile.id, "packet");
+  } catch (error) {
+    const quota = quotaErrorResponse(error);
+    if (quota) return c.json(quota, 429);
+    throw error;
+  }
+  const job = await loadJob(profile.id, c.req.param("id"));
   if (!job) return c.json({ error: "not found" }, 404);
-  const version =
+  let version =
     job.resumeVersions[0] ??
     (await prisma.resumeVersion.create({
       data: {
@@ -184,14 +199,30 @@ jobRoutes.get("/:id/packet", async (c) => {
         }),
       },
     }));
-  const pdf = await renderResumePdf(parseJson(version.contentJson, {}));
+  if (!version.packetObjectId) {
+    const pdf = await renderResumePdf(parseJson(version.contentJson, {}));
+    const stored = await putEncryptedObject({
+      profileId: profile.id,
+      kind: "packet",
+      originalName: `${job.company}-${job.title}.pdf`.replace(/[^a-z0-9.-]+/gi, "-"),
+      contentType: "application/pdf",
+      bytes: pdf,
+    });
+    version = await prisma.resumeVersion.update({
+      where: { id: version.id },
+      data: { packetObjectId: stored.id },
+    });
+    await recordUsage(profile.id, "packet");
+  }
+  if (!version.packetObjectId) return c.json({ error: "packet_unavailable" }, 500);
+  const packet = await getDecryptedObject(version.packetObjectId, profile.id);
   const safeName = `${job.company}-${job.title}`.replace(/[^a-z0-9-]+/gi, "-");
   c.header("Content-Disposition", `attachment; filename="${safeName}.pdf"`);
-  return c.body(new Uint8Array(pdf), 200, { "Content-Type": "application/pdf" });
+  return c.body(new Uint8Array(packet.bytes), 200, { "Content-Type": "application/pdf" });
 });
 
 jobRoutes.post("/:id/apply", async (c) => {
-  const profile = await ensureProfile();
+  const profile = await profileFor(c);
   const job = await prisma.job.findUnique({ where: { id: c.req.param("id") } });
   if (!job) return c.json({ error: "not found" }, 404);
   const existing = await prisma.application.findFirst({
@@ -216,8 +247,8 @@ jobRoutes.post("/:id/apply", async (c) => {
   return c.json({ application });
 });
 
-async function ensureSuggestions(jobId: string) {
-  const profile = await ensureProfile();
+async function ensureSuggestions(profileId: string, jobId: string) {
+  const profile = await prisma.profile.findUniqueOrThrow({ where: { id: profileId } });
   const job = await prisma.job.findUniqueOrThrow({ where: { id: jobId } });
   const requirements = deepRead(job.description, job.title);
   const skills = await prisma.skill.findMany({ where: { profileId: profile.id } });
@@ -227,6 +258,7 @@ async function ensureSuggestions(jobId: string) {
     .slice(0, 5)
     .map((skill) => ({
       jobId,
+      profileId,
       kind: "promote",
       section: "skills",
       afterText: skill,
@@ -234,6 +266,7 @@ async function ensureSuggestions(jobId: string) {
     }));
   suggestions.unshift({
     jobId,
+    profileId,
     kind: "retitle",
     section: "summary",
     afterText: `${job.title} with experience aligned to ${job.company}'s stated priorities.`,

@@ -12,9 +12,21 @@ let package = Package(
         .library(name: "JobHuntUI", targets: ["JobHuntUI"]),
         .executable(name: "JobHuntOSApp", targets: ["JobHuntApp"]),
     ],
+    dependencies: [
+        .package(
+            url: "https://github.com/google/GoogleSignIn-iOS.git",
+            from: "10.0.0"
+        ),
+    ],
     targets: [
         .target(name: "JobHuntKit"),
-        .target(name: "JobHuntUI", dependencies: ["JobHuntKit"]),
+        .target(
+            name: "JobHuntUI",
+            dependencies: [
+                "JobHuntKit",
+                .product(name: "GoogleSignIn", package: "GoogleSignIn-iOS"),
+            ]
+        ),
         .executableTarget(name: "JobHuntApp", dependencies: ["JobHuntUI"]),
     ]
 )

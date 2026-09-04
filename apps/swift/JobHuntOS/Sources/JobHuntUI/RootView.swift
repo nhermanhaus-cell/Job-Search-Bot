@@ -28,6 +28,28 @@ public struct RootView: View {
 
     public var body: some View {
         Group {
+            switch store.phase {
+            case .bootstrapping:
+                ProgressView("Restoring your session…")
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .unauthenticated:
+                AuthLandingView()
+            case .onboarding:
+                OnboardingView()
+            case .main:
+                signedInShell
+            }
+        }
+        .environmentObject(store)
+        .task { await store.bootstrap() }
+        .onOpenURL { url in
+            _ = GoogleSignInCoordinator.handle(url)
+        }
+    }
+
+    @ViewBuilder
+    private var signedInShell: some View {
+        Group {
             #if os(macOS)
             NavigationSplitView {
                 List(AppDestination.allCases) { destination in
@@ -51,17 +73,6 @@ public struct RootView: View {
                 }
             }
             #endif
-        }
-        .environmentObject(store)
-        .task { await store.refresh() }
-        .sheet(
-            isPresented: Binding(
-                get: { store.profile.map { !$0.onboardingDone } ?? false },
-                set: { _ in }
-            )
-        ) {
-            OnboardingView()
-                .environmentObject(store)
         }
     }
 
