@@ -9,6 +9,7 @@ import { mailRoutes } from "./routes/mail.js";
 import { profileRoutes } from "./routes/profile.js";
 import { searchRoutes } from "./routes/search.js";
 import { statsRoutes } from "./routes/stats.js";
+import { settingsRoutes } from "./routes/settings.js";
 import { googleConfigured } from "./mail/gmail.js";
 
 export const app = new Hono();
@@ -25,9 +26,11 @@ app.get("/api/health", (c) =>
 app.route("/api/mail", mailRoutes);
 app.route("/api/applications", applicationRoutes);
 app.route("/api/profile", profileRoutes);
+app.route("/api/intake", profileRoutes);
 app.route("/api/search", searchRoutes);
 app.route("/api/jobs", jobRoutes);
 app.route("/api/stats", statsRoutes);
+app.route("/api/settings", settingsRoutes);
 
 app.get("/api/sync", async (c) => {
   const profile = await ensureProfile();

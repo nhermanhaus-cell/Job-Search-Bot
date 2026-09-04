@@ -27,6 +27,7 @@ profileRoutes.get("/", async (c) => {
   return c.json({
     profile: {
       ...profile,
+      enabledSources: json<string[]>(profile.enabledSourcesJson, []),
       experienceItems: profile.experienceItems.map((item) => ({
         ...item,
         bullets: json<string[]>(item.bulletsJson, []),
@@ -56,10 +57,16 @@ profileRoutes.patch("/", async (c) => {
     maxYearsRequired?: number;
     summary?: string;
     onboardingDone?: boolean;
+    enabledSources?: string[];
+    mailPollMinutes?: number;
   }>();
+  const { enabledSources, ...fields } = body;
   const profile = await prisma.profile.update({
     where: { id: base.id },
-    data: body,
+    data: {
+      ...fields,
+      enabledSourcesJson: enabledSources ? JSON.stringify(enabledSources) : undefined,
+    },
   });
   return c.json({ profile });
 });

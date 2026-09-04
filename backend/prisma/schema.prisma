@@ -15,6 +15,8 @@ model Profile {
   remotePreference String?
   maxYearsRequired Int?
   summary          String?
+  enabledSourcesJson String @default("[\"demo\",\"remotive\",\"remoteok\"]")
+  mailPollMinutes  Int      @default(15)
   onboardingDone   Boolean  @default(false)
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -30,6 +32,18 @@ model Profile {
   matches           Match[]
   resumeVersions    ResumeVersion[]
   profileConflicts  ProfileConflict[]
+  serverSecrets     ServerSecret[]
+}
+
+model ServerSecret {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name      String
+  valueEnc  String
+  updatedAt DateTime @updatedAt
+
+  @@unique([profileId, name])
 }
 
 model ProfileConflict {

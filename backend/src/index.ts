@@ -4,19 +4,17 @@ import { resolve } from "node:path";
 import { app } from "./app.js";
 import { env } from "./env.js";
 import { ensureProfile } from "./db.js";
-import { googleConfigured } from "./mail/gmail.js";
-import { syncAllAccounts } from "./mail/sync.js";
+import { syncDueAccounts } from "./mail/sync.js";
 import { runStandingSearches } from "./jobs/scheduler.js";
+import { loadServerSecrets } from "./routes/settings.js";
 
 mkdirSync(resolve(import.meta.dirname, "../.data"), { recursive: true });
 await ensureProfile();
+await loadServerSecrets();
 
-const POLL_MS = Number(process.env.MAIL_POLL_MS ?? 15 * 60 * 1000);
-if (googleConfigured()) {
-  setInterval(() => {
-    syncAllAccounts().catch((err) => console.error("mail poll failed", err));
-  }, POLL_MS);
-}
+setInterval(() => {
+  syncDueAccounts().catch((err) => console.error("mail poll failed", err));
+}, 60_000);
 setInterval(() => {
   runStandingSearches().catch((err) => console.error("standing job search failed", err));
 }, env.jobRefreshMs);

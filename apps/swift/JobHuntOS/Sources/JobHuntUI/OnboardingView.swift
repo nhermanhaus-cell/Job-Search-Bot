@@ -6,6 +6,7 @@ public struct OnboardingView: View {
     @EnvironmentObject private var store: AppStore
     @State private var step = 0
     @State private var showImporter = false
+    @State private var showPaste = false
     @State private var uploading = false
     @State private var name = ""
     @State private var email = ""
@@ -65,6 +66,8 @@ public struct OnboardingView: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(uploading)
+            Button("Paste resume or LinkedIn text") { showPaste = true }
+                .buttonStyle(.bordered)
             if uploading { ProgressView() }
             if !(store.profile?.resumeDocuments.isEmpty ?? true) {
                 Text("\(store.profile?.resumeDocuments.count ?? 0) documents uploaded")
@@ -73,6 +76,10 @@ public struct OnboardingView: View {
             errorText
         }
         .padding(32)
+        .sheet(isPresented: $showPaste) {
+            PasteResumeTextView()
+                .environmentObject(store)
+        }
     }
 
     private var reviewStep: some View {
@@ -193,5 +200,39 @@ public struct OnboardingView: View {
         email = profile.email ?? ""
         location = profile.location ?? ""
         maxYears = profile.maxYearsRequired ?? 6
+    }
+}
+
+private struct PasteResumeTextView: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var text = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Paste resume or LinkedIn experience text", text: $text, axis: .vertical)
+                    .lineLimit(16 ... 30)
+            }
+            .navigationTitle("Paste background")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Import") {
+                        Task {
+                            let url = FileManager.default.temporaryDirectory
+                                .appendingPathComponent("pasted-background-\(UUID().uuidString).txt")
+                            try? Data(text.utf8).write(to: url)
+                            await store.uploadResumes([url])
+                            try? FileManager.default.removeItem(at: url)
+                            dismiss()
+                        }
+                    }
+                    .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
     }
 }

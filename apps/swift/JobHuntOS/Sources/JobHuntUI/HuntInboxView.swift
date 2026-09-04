@@ -7,6 +7,8 @@ public struct HuntInboxView: View {
     @State private var location = ""
     @State private var enabledSources = Set<String>()
     @State private var showSources = false
+    @State private var selectedSource: String?
+    @State private var hideOverYears = true
 
     public init() {}
 
@@ -23,7 +25,7 @@ public struct HuntInboxView: View {
                         description: Text("Choose a title and search. Sources fill this inbox independently.")
                     )
                 } else {
-                    List(store.jobs) { job in
+                    List(filteredJobs) { job in
                         NavigationLink {
                             JobDetailView(jobID: job.id)
                         } label: {
@@ -36,7 +38,10 @@ public struct HuntInboxView: View {
             .navigationTitle("Hunt")
             .task {
                 if enabledSources.isEmpty {
-                    enabledSources = Set(store.sources.filter(\.configured).map(\.id))
+                    enabledSources = Set(
+                        store.serverSettings?.enabledSources
+                            ?? store.sources.filter(\.configured).map(\.id)
+                    )
                 }
                 if query.isEmpty {
                     query = store.profile?.titleInterests.first(where: \.pinned)?.title ?? ""
@@ -118,17 +123,25 @@ public struct HuntInboxView: View {
                 .buttonStyle(.bordered)
                 ForEach(store.sourceStates.keys.sorted(), id: \.self) { source in
                     let state = store.sourceStates[source] ?? ""
-                    HStack(spacing: 4) {
-                        if state == "loading" { ProgressView().controlSize(.small) }
-                        Image(systemName: state == "error" ? "exclamationmark.triangle" : "circle.fill")
-                            .font(.system(size: 7))
-                        Text(source)
-                        if let count = store.sourceCounts[source] { Text("\(count)") }
+                    Button {
+                        selectedSource = selectedSource == source ? nil : source
+                    } label: {
+                        HStack(spacing: 4) {
+                            if state == "loading" { ProgressView().controlSize(.small) }
+                            Image(systemName: state == "error" ? "exclamationmark.triangle" : "circle.fill")
+                                .font(.system(size: 7))
+                            Text(source)
+                            if let count = store.sourceCounts[source] { Text("\(count)") }
+                        }
+                        .font(.caption)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .background(
+                            selectedSource == source ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.1),
+                            in: Capsule()
+                        )
                     }
-                    .font(.caption)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(.quaternary, in: Capsule())
+                    .buttonStyle(.plain)
                 }
                 let pulling = store.sourceStates.filter { $0.value == "loading" || $0.value == "queued" }
                 if !pulling.isEmpty {
@@ -159,12 +172,32 @@ public struct HuntInboxView: View {
                 }
                 .tint(color(difficulty))
             }
+            Toggle("Within years cap", isOn: $hideOverYears)
+                .toggleStyle(.button)
             Spacer()
-            Text("\(store.jobs.count) jobs").foregroundStyle(.secondary)
+            Text("\(filteredJobs.count) jobs").foregroundStyle(.secondary)
         }
         .buttonStyle(.bordered)
         .padding(.horizontal)
         .padding(.bottom, 6)
+    }
+
+    private var filteredJobs: [Job] {
+        store.jobs.filter { job in
+            let sourceMatch = selectedSource.map { selected in
+                job.provider == selected
+                    || (job.sources?.contains { $0.provider == selected } ?? false)
+            } ?? true
+            let yearMatch: Bool
+            if hideOverYears,
+               let cap = store.profile?.maxYearsRequired,
+               let required = job.requirements?.minYears {
+                yearMatch = required <= cap
+            } else {
+                yearMatch = true
+            }
+            return sourceMatch && yearMatch
+        }
     }
 }
 

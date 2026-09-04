@@ -240,6 +240,29 @@ public actor APIClient {
         )
     }
 
+    public func addExperience(
+        company: String,
+        title: String,
+        bullets: [String]
+    ) async throws {
+        struct Body: Encodable {
+            var company: String
+            var title: String
+            var bullets: [String]
+        }
+        struct Raw: Decodable { var id: String }
+        struct Box: Decodable { var item: Raw }
+        let _: Box = try await jsonRequest(
+            "/api/profile/experience",
+            method: "POST",
+            body: Body(company: company, title: title, bullets: bullets)
+        )
+    }
+
+    public func deleteExperience(id: String) async throws {
+        try await delete("/api/profile/experience/\(id)")
+    }
+
     public func resolveConflict(id: String, value: String) async throws {
         struct Body: Encodable { var value: String }
         struct Raw: Decodable { var id: String }
@@ -376,5 +399,42 @@ public actor APIClient {
 
     public func jobStats() async throws -> JobStats {
         try await get("/api/stats/jobs")
+    }
+
+    public func serverSettings() async throws -> ServerSettings {
+        try await get("/api/settings")
+    }
+
+    public func updateServerSettings(
+        enabledSources: [String],
+        mailPollMinutes: Int
+    ) async throws {
+        struct Body: Encodable {
+            var enabledSources: [String]
+            var mailPollMinutes: Int
+        }
+        struct Response: Decodable {
+            var enabledSources: [String]
+            var mailPollMinutes: Int
+        }
+        let _: Response = try await jsonRequest(
+            "/api/settings",
+            method: "PATCH",
+            body: Body(enabledSources: enabledSources, mailPollMinutes: mailPollMinutes)
+        )
+    }
+
+    public func setOpenAIKey(_ apiKey: String) async throws {
+        struct Body: Encodable { var apiKey: String }
+        struct Response: Decodable { var configured: Bool }
+        let _: Response = try await jsonRequest(
+            "/api/settings/openai-key",
+            method: "PUT",
+            body: Body(apiKey: apiKey)
+        )
+    }
+
+    public func removeOpenAIKey() async throws {
+        try await delete("/api/settings/openai-key")
     }
 }

@@ -6,6 +6,9 @@ public struct SettingsView: View {
     @AppStorage("backendURL") private var backendURL = "http://127.0.0.1:3000"
     @State private var maxYears = 6
     @State private var saved = false
+    @State private var enabledSources = Set<String>()
+    @State private var mailPollMinutes = 15
+    @State private var openAIKey = ""
 
     public init() {}
 
@@ -69,19 +72,79 @@ public struct SettingsView: View {
 
                 Section("Job sources") {
                     ForEach(store.sources) { source in
-                        LabeledContent(source.name) {
-                            Label(
-                                source.configured ? "Ready" : "Needs key",
-                                systemImage: source.configured ? "checkmark.circle" : "key"
+                        Toggle(
+                            isOn: Binding(
+                                get: { enabledSources.contains(source.id) },
+                                set: { enabled in
+                                    if enabled { enabledSources.insert(source.id) }
+                                    else { enabledSources.remove(source.id) }
+                                }
                             )
-                            .foregroundStyle(source.configured ? Color.green : Color.orange)
+                        ) {
+                            VStack(alignment: .leading) {
+                                Text(source.name)
+                                if !source.configured {
+                                    Text(source.missingReason ?? "Configure this source on the backend")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
+                                }
+                            }
                         }
+                        .disabled(!source.configured)
+                    }
+                    Button("Save source defaults") {
+                        Task {
+                            try? await store.client.updateServerSettings(
+                                enabledSources: Array(enabledSources),
+                                mailPollMinutes: mailPollMinutes
+                            )
+                            await store.refresh()
+                        }
+                    }
+                }
+
+                Section("Automatic mail interval") {
+                    Stepper(
+                        "Check every \(mailPollMinutes) minutes",
+                        value: $mailPollMinutes,
+                        in: 5 ... 120,
+                        step: 5
+                    )
+                }
+
+                Section("OpenAI on the backend") {
+                    if store.serverSettings?.secrets.openai == true {
+                        Label("API key configured", systemImage: "checkmark.shield")
+                            .foregroundStyle(.green)
+                        Button("Remove API key", role: .destructive) {
+                            Task {
+                                try? await store.client.removeOpenAIKey()
+                                await store.refresh()
+                            }
+                        }
+                    } else {
+                        SecureField("sk-…", text: $openAIKey)
+                        Button("Save key to encrypted backend storage") {
+                            Task {
+                                try? await store.client.setOpenAIKey(openAIKey)
+                                openAIKey = ""
+                                await store.refresh()
+                            }
+                        }
+                        .disabled(openAIKey.isEmpty)
                     }
                 }
             }
             .formStyle(.grouped)
             .navigationTitle("Settings")
-            .onAppear { maxYears = store.profile?.maxYearsRequired ?? 6 }
+            .onAppear {
+                maxYears = store.profile?.maxYearsRequired ?? 6
+                enabledSources = Set(
+                    store.serverSettings?.enabledSources
+                        ?? store.sources.filter(\.configured).map(\.id)
+                )
+                mailPollMinutes = store.serverSettings?.mailPollMinutes ?? 15
+            }
         }
     }
 }

@@ -48,3 +48,17 @@ export async function syncAllAccounts() {
   }
   return results;
 }
+
+export async function syncDueAccounts() {
+  const accounts = await prisma.mailAccount.findMany({ include: { profile: true } });
+  const now = Date.now();
+  const due = accounts.filter((account) => {
+    const interval = account.profile.mailPollMinutes * 60_000;
+    return !account.lastSyncAt || now - account.lastSyncAt.getTime() >= interval;
+  });
+  const results = [];
+  for (const account of due) {
+    results.push(await syncMailAccount(account.id));
+  }
+  return results;
+}

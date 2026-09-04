@@ -14,7 +14,9 @@ export async function runStandingSearches() {
         await createSearchSession(
           profile.id,
           { query: interest.title, location: profile.location },
-          defaultProviderNames,
+          (JSON.parse(profile.enabledSourcesJson) as string[]).length
+            ? (JSON.parse(profile.enabledSourcesJson) as string[])
+            : defaultProviderNames,
         ),
       );
     }

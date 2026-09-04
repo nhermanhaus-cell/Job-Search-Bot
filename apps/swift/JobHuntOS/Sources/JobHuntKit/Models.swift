@@ -86,6 +86,8 @@ public struct Profile: Codable, Identifiable, Sendable {
     public var remotePreference: String?
     public var maxYearsRequired: Int?
     public var summary: String?
+    public var enabledSources: [String]
+    public var mailPollMinutes: Int
     public var onboardingDone: Bool
     public var resumeDocuments: [ResumeDocument]
     public var experienceItems: [ExperienceItem]
@@ -149,6 +151,24 @@ public struct SourceInfo: Codable, Identifiable, Sendable {
     public var id: String
     public var name: String
     public var configured: Bool
+    public var missingReason: String?
+}
+
+public struct ServerSettings: Codable, Sendable {
+    public var enabledSources: [String]
+    public var mailPollMinutes: Int
+    public var sources: [SettingsSource]
+    public var secrets: SecretStatus
+}
+
+public struct SettingsSource: Codable, Identifiable, Sendable {
+    public var id: String
+    public var configured: Bool
+    public var missingReason: String?
+}
+
+public struct SecretStatus: Codable, Sendable {
+    public var openai: Bool
 }
 
 public struct Job: Codable, Identifiable, Sendable {

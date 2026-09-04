@@ -9,6 +9,7 @@ public struct ResumeStudioView: View {
     @State private var newTitle = ""
     @State private var newSkill = ""
     @State private var selectedExperience: ExperienceItem?
+    @State private var showNewExperience = false
 
     public init() {}
 
@@ -66,6 +67,11 @@ public struct ResumeStudioView: View {
                 }
 
                 Section("Experience inventory") {
+                    Button {
+                        showNewExperience = true
+                    } label: {
+                        Label("Add experience", systemImage: "plus")
+                    }
                     ForEach(store.profile?.experienceItems ?? []) { item in
                         Button {
                             selectedExperience = item
@@ -82,6 +88,14 @@ public struct ResumeStudioView: View {
                             }
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button("Delete", role: .destructive) {
+                                Task {
+                                    try? await store.client.deleteExperience(id: item.id)
+                                    store.profile = try? await store.client.profile()
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -133,6 +147,49 @@ public struct ResumeStudioView: View {
             .sheet(item: $selectedExperience) { item in
                 ExperienceEditor(item: item)
                     .environmentObject(store)
+            }
+            .sheet(isPresented: $showNewExperience) {
+                NewExperienceView()
+                    .environmentObject(store)
+            }
+        }
+    }
+}
+
+private struct NewExperienceView: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var title = ""
+    @State private var company = ""
+    @State private var bullets = ""
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("Title", text: $title)
+                TextField("Company", text: $company)
+                TextField("One fact per line", text: $bullets, axis: .vertical)
+                    .lineLimit(8 ... 20)
+            }
+            .navigationTitle("Add experience")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Add") {
+                        Task {
+                            try? await store.client.addExperience(
+                                company: company,
+                                title: title,
+                                bullets: bullets.split(separator: "\n").map(String.init)
+                            )
+                            store.profile = try? await store.client.profile()
+                            dismiss()
+                        }
+                    }
+                    .disabled(title.isEmpty || company.isEmpty)
+                }
             }
         }
     }

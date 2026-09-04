@@ -80,6 +80,8 @@ public struct HomeView: View {
                 .foregroundStyle(by: .value("Difficulty", difficulty.rawValue.capitalized))
             }
             .frame(height: 190)
+            .contentShape(Rectangle())
+            .onTapGesture { onNavigate(.hunt) }
         }
     }
 
@@ -107,6 +109,8 @@ public struct HomeView: View {
             }
             .chartYAxisLabel("Jobs")
             .frame(height: 230)
+            .contentShape(Rectangle())
+            .onTapGesture { onNavigate(.hunt) }
         }
     }
 
@@ -124,6 +128,8 @@ public struct HomeView: View {
                 )
             }
             .frame(height: 200)
+            .contentShape(Rectangle())
+            .onTapGesture { onNavigate(.tracker) }
         }
     }
 }

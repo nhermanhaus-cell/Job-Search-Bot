@@ -56,6 +56,13 @@ public struct JobDetailView: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
+                Button("Hide") {
+                    Task {
+                        try? await store.client.updateMatch(jobId: jobID, difficulty: nil, hidden: true)
+                        await store.refreshJobs()
+                    }
+                }
+                .buttonStyle(.bordered)
             }
         }
     }
@@ -128,40 +135,14 @@ public struct JobDetailView: View {
     private func tailoringCard(_ job: JobDetail) -> some View {
         GroupBox("Suggested resume edits") {
             VStack(alignment: .leading, spacing: 12) {
-                if job.suggestions.isEmpty {
-                    Text("No grounded edits found.").foregroundStyle(.secondary)
+                Text("\(job.suggestions.count) grounded changes are ready for review.")
+                    .foregroundStyle(.secondary)
+                NavigationLink {
+                    TailorReviewView(jobID: jobID)
+                } label: {
+                    Label("Review, preview, and apply", systemImage: "wand.and.stars")
                 }
-                ForEach(job.suggestions) { suggestion in
-                    SuggestionRow(
-                        suggestion: suggestion,
-                        onDecision: { status, text in
-                            Task {
-                                try? await store.client.updateSuggestion(
-                                    jobId: jobID,
-                                    suggestion: suggestion,
-                                    status: status,
-                                    afterText: text
-                                )
-                                await load()
-                            }
-                        }
-                    )
-                }
-                HStack {
-                    Button("Create tailored version") {
-                        Task {
-                            try? await store.client.createResumeVersion(jobId: jobID)
-                            await load()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    Button("Download packet") {
-                        Task {
-                            let url = await store.client.packetURL(jobId: jobID)
-                            openURL(url)
-                        }
-                    }
-                }
+                .buttonStyle(.borderedProminent)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -174,7 +155,7 @@ public struct JobDetailView: View {
     }
 }
 
-private struct SuggestionRow: View {
+struct SuggestionRow: View {
     let suggestion: EditSuggestion
     let onDecision: (String, String?) -> Void
     @State private var editing = false

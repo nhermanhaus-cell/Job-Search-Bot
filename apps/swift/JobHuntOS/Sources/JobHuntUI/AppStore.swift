@@ -12,6 +12,7 @@ public final class AppStore: ObservableObject {
     @Published public var applicationStats: ApplicationStats?
     @Published public var jobStats: JobStats?
     @Published public var sources: [SourceInfo] = []
+    @Published public var serverSettings: ServerSettings?
     @Published public var sourceStates: [String: String] = [:]
     @Published public var sourceCounts: [String: Int] = [:]
     @Published public var searchRunning = false
@@ -46,6 +47,7 @@ public final class AppStore: ObservableObject {
             async let jobStatsValue = client.jobStats()
             async let mailValue = client.mailStatus()
             async let sourcesValue = client.sources()
+            async let settingsValue = client.serverSettings()
             profile = try await profileValue
             jobs = try await jobsValue
             applications = try await appsValue
@@ -54,6 +56,7 @@ public final class AppStore: ObservableObject {
             jobStats = try await jobStatsValue
             mailStatus = try await mailValue
             sources = try await sourcesValue
+            serverSettings = try await settingsValue
             if let profile { cache.save(profile, key: "profile") }
             cache.save(jobs, key: "jobs")
             cache.save(applications, key: "applications")
