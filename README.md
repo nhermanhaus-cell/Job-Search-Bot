@@ -34,4 +34,4 @@ npm run dev
 
 In another terminal: `npm run dev:worker`.
 
-Swift app: [apps/swift/JobHuntOS](apps/swift/JobHuntOS). Generate the Xcode project with `xcodegen generate`. Release builds talk to `https://job-hunt-os.fly.dev`; debug builds default to `http://localhost:3000` and still allow a backend URL override.
+Swift app: [apps/swift/JobHuntOS](apps/swift/JobHuntOS). On a Mac, double-click `apps/swift/JobHuntOS/Open-in-Xcode.command`, or `open apps/swift/JobHuntOS/Package.swift` and run the **JobHuntOSApp** scheme on **My Mac**.

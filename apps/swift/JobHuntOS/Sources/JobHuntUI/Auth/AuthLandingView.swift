@@ -144,3 +144,8 @@ private struct LegalWebView: UIViewRepresentable {
     }
 }
 #endif
+
+#Preview("Sign-in landing") {
+    AuthLandingView()
+        .environmentObject(AppStore())
+}

@@ -133,3 +133,8 @@ public struct HomeView: View {
         }
     }
 }
+
+#Preview("Home") {
+    HomeView(onNavigate: { _ in })
+        .environmentObject(AppStore())
+}

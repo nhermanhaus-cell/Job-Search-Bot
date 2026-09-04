@@ -87,3 +87,7 @@ public struct RootView: View {
         }
     }
 }
+
+#Preview("App") {
+    RootView()
+}

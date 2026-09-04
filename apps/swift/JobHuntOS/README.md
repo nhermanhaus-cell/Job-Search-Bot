@@ -1,60 +1,52 @@
 # Job Hunt OS — SwiftUI app
 
-The full product surface is implemented in SwiftUI:
+Open this folder on a Mac. You can preview screens in the Xcode canvas, run on your Mac, or generate an iPhone project.
 
-- Showcase landing with Get Started / Log In (Apple and Google)
-- iPhone: Home, Hunt, Resume, Tracker, Settings tabs
-- Mac: the same destinations in a sidebar
-- Multi-resume onboarding and role-title suggestions
-- Source-by-source SSE search (authorized)
-- Full JD requirements, fit score, easy / medium / reach
-- Resume edit suggestions and application handoff
-- Swift Charts and optional Gmail tracker
-- User-scoped SwiftData snapshots and Keychain sessions
+## Fastest: open in Xcode
 
-`JobHuntKit` contains API models/client. `JobHuntUI` contains the adaptive app. `JobHuntApp` is the `@main` target.
+**Option A — double-click** `Open-in-Xcode.command` in Finder  
+(`apps/swift/JobHuntOS/Open-in-Xcode.command`)
 
-## Open on a Mac
+That installs XcodeGen if needed, generates `JobHuntOS.xcodeproj`, and opens it. Then:
 
-Install XcodeGen, then:
+1. Select the **JobHuntOS-iOS** scheme (top-left).
+2. Pick an **iPhone simulator**.
+3. Press **Run** (⌘R).
+
+**Option B — Package.swift (Mac app, no XcodeGen)**
+
+```bash
+open apps/swift/JobHuntOS/Package.swift
+```
+
+Select the **JobHuntOSApp** scheme, destination **My Mac**, press Run.
+
+**Option C — terminal**
 
 ```bash
 cd apps/swift/JobHuntOS
+brew install xcodegen   # once
 xcodegen generate
 open JobHuntOS.xcodeproj
 ```
 
-Enable Sign in with Apple on the App IDs `com.jobhuntos.app` and `com.jobhuntos.mac`. Set `GOOGLE_IOS_CLIENT_ID` for Google Sign-In. Release builds use `https://job-hunt-os.fly.dev`; debug builds default to `http://localhost:3000`.
+The first screen is the showcase landing (Get Started / Log In). You do not need the backend to *see* that UI. Sign-in, hunt, and resume upload need the API at `http://localhost:3000` in Debug.
 
-Start the backend first (Postgres + `npm run dev` and `npm run dev:worker`).
+## SwiftUI Previews
 
-Gmail OAuth, provider keys, AI parsing/classification, and job search workers stay on the backend. The Apple app only receives scoped JSON and SSE events. Tokens live in the Keychain; switching accounts clears that user’s SwiftData cache.
+Open `Auth/AuthLandingView.swift` or `RootView.swift` and press **⌥⌘↩** (Editor → Canvas) to see the landing and shell without running.
 
+## Signing
 
-`JobHuntKit` contains API models/client. `JobHuntUI` contains the adaptive app. `JobHuntApp` is the `@main` target.
+Xcode will ask for your Personal Team. Use Automatic signing. Enable **Sign in with Apple** on App IDs `com.jobhuntos.app` / `com.jobhuntos.mac` when you want Apple login. Google Sign-In needs a `GIDClientID` in the Info plist; until then Apple still works and Google shows a setup error.
 
-## Open on a Mac
-
-Install XcodeGen, then:
-
-```bash
-cd apps/swift/JobHuntOS
-xcodegen generate
-open JobHuntOS.xcodeproj
-```
-
-Or open `Package.swift` directly to run the macOS executable.
-
-Start the backend first:
+## Backend (for data, not for viewing UI)
 
 ```bash
 cd backend
+cp .env.example .env
 npm install
 npx prisma generate
-npx prisma db push
+npx prisma migrate deploy
 npm run dev
 ```
-
-The default URL is `http://localhost:3000`. On a physical iPhone, set the backend URL in Settings to an HTTPS server or your Mac’s `.local` hostname. The XcodeGen project enables local-network access for development.
-
-Gmail OAuth, provider keys, AI parsing/classification, and job search workers stay on the backend. The Apple app only receives scoped JSON and SSE events.
