@@ -1,24 +1,34 @@
 # Job Hunt OS
 
-Backend-powered job hunt with a SwiftUI client: ingest one or more resumes, suggest and type job titles, run source searches **on the server**, sync listings to the app (clickable as each source lands), chart applications and easy/medium/reach matches, read each JD for hidden requirements, suggest resume edits, then apply after you approve.
+Backend-powered job hunt with a SwiftUI client. This slice ships **automatic Gmail tracking**: connect Gmail once, classify recruiter mail on the server, update the application tracker, and chart the pipeline in Swift.
 
-**Planning stage.** Implementation contract: [docs/PLAN.md](docs/PLAN.md).
+Planning background: [docs/PLAN.md](docs/PLAN.md).
 
-## Why this exists
+## Model choice (this build)
 
-Job boards make it hard to explore several backgrounds at once and to see the shape of the hunt (volume, difficulty, pipeline). Enhancv is strong at keyword tailoring; this app is the daily hunt + match + charts + edit + apply loop around that.
+| Layer | Choice | Why |
+|---|---|---|
+| Mail classifier | **`gpt-4o-mini`** (`OPENAI_MODEL`) | Closed labels (receipt / rejection / interview / offer). Structured JSON, cheap, fast. Rules run first; the model only sees low-confidence snippets. |
+| Do not use | Frontier chat models on every email | Wasteful for this taxonomy; keep them for resume tailoring later |
+| Do not use | On-device LLM in Swift | Tokens, Gmail OAuth, and rate limits belong on the backend |
+| App architecture | **TypeScript backend + SwiftUI client** | Linux/Mac worker can poll Gmail; the phone only syncs |
 
-## What v1 will do
+Set `OPENAI_API_KEY` to enable the model fallback. Without it, deterministic rules still file high-signal ATS mail.
 
-- **Intake** from multiple uploaded resumes → merged background, suggested titles, plus titles you type
-- **Backend search** across a wide catalog (Google-for-Jobs style, Adzuna, USAJobs, ATS boards, remote/startup/specialty, RSS, paste)
-- **Sustainable delivery** to Swift: standing queries on a schedule, cursor sync, live SSE for on-demand search, optional APNs
-- **Progressive results** in-app: loading icon + dropdown of sources still pulling; each job is a link as soon as that source returns
-- **Swift Charts:** applications tracker, new matching jobs over time, easy / medium / reach breakdown
-- **Deep JD read** + LinkedIn-style match with a why-line
-- **Suggested edits** from the merged inventory; approve-then-send
-- **Gmail (optional):** connect your inbox via Google OAuth so the backend can file receipts, rejections, and interview mail onto the tracker. ChatGPT’s Gmail connector is not reused; OpenAI only classifies mail we already fetched.
+## Run the backend
 
-## Status
+```bash
+cd backend
+npm install
+npx prisma generate
+npx prisma db push
+npm test
+npm run dev
+```
 
-Design only. Next implementation step: Phase 0 — multi-resume intake, title suggestions, paste-a-JD match, chart shells.
+Open [http://localhost:3000](http://localhost:3000):
+
+- **Load demo inbox** — no Google or OpenAI keys
+- **Connect Gmail** — after you add `GOOGLE_OAUTH_CLIENT_ID` / `SECRET` (redirect `http://localhost:3000/api/mail/google/callback`)
+
+Swift package: [apps/swift/JobHuntOS](apps/swift/JobHuntOS). Charts and the tracker read `/api/applications/stats` and `/api/sync`.

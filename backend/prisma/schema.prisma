@@ -1,0 +1,90 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:../.data/app.db"
+}
+
+model Profile {
+  id        String   @id @default("local")
+  name      String?
+  email     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  mailAccounts  MailAccount[]
+  applications  Application[]
+  mailEvents    MailEvent[]
+}
+
+model MailAccount {
+  id                String    @id @default(cuid())
+  profileId         String
+  profile           Profile   @relation(fields: [profileId], references: [id])
+  provider          String    @default("gmail")
+  email             String
+  refreshTokenEnc   String
+  accessTokenEnc    String?
+  accessTokenExp    DateTime?
+  historyId         String?
+  watchExpiresAt    DateTime?
+  lastSyncAt        DateTime?
+  lastError         String?
+  connectedAt       DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([profileId, provider, email])
+}
+
+model Application {
+  id          String    @id @default(cuid())
+  profileId   String
+  profile     Profile   @relation(fields: [profileId], references: [id])
+  company     String
+  jobTitle    String?
+  status      String    @default("submitted")
+  source      String    @default("gmail_inferred")
+  listingUrl  String?
+  notes       String?
+  appliedAt   DateTime?
+  openedAt    DateTime?
+  submittedAt DateTime?
+  interviewAt DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  mailEvents  MailEvent[]
+
+  @@index([profileId, company])
+}
+
+model MailEvent {
+  id             String       @id @default(cuid())
+  profileId      String
+  profile        Profile      @relation(fields: [profileId], references: [id])
+  applicationId  String?
+  application    Application? @relation(fields: [applicationId], references: [id])
+  provider       String       @default("gmail")
+  messageId      String
+  threadId       String?
+  fromAddress    String?
+  subject        String?
+  snippet        String?
+  receivedAt     DateTime?
+  classification String
+  company        String?
+  jobTitle       String?
+  confidence     Float
+  eventTime      DateTime?
+  meetingUrl     String?
+  nextAction     String?
+  reviewState    String       @default("pending")
+  rawExcerpt     String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([provider, messageId])
+  @@index([profileId, reviewState])
+}

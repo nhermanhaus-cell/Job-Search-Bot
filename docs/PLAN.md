@@ -17,7 +17,7 @@ This repo is greenfield. This file is the implementation contract.
 | Difficulty | Every match is banded **easy / medium / reach** for charts and inbox filters |
 | Tailoring | Suggested edits from the merged inventory; you accept, reject, or rewrite |
 | Apply | Approve-then-send: official listing URL always; ATS / partner apply where the adapter can submit |
-| Mail | User-authorized **Gmail OAuth** on our backend; classify threads into applied / rejection / interview / screen / offer. OpenAI classifies mail we already fetched — it does **not** inherit ChatGPT’s Gmail connection |
+| Mail | User-authorized **Gmail OAuth** on our backend; classify threads into applied / rejection / interview / screen / offer. Classifier: **`gpt-4o-mini`** after deterministic rules. OpenAI does **not** inherit ChatGPT’s Gmail connection |
 
 Years/seniority caps, source toggles, and template style are **user preferences**, not product locks. Filters default on and can be turned off per search.
 
