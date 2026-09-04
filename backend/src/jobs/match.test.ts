@@ -30,6 +30,8 @@ describe("scoreJob", () => {
         remotePreference: null,
         maxYearsRequired: 6,
         summary: null,
+        enabledSourcesJson: "[\"demo\"]",
+        mailPollMinutes: 15,
         onboardingDone: true,
         createdAt: new Date(),
         updatedAt: new Date(),
