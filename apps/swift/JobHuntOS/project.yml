@@ -1,0 +1,38 @@
+name: JobHuntOS
+options:
+  bundleIdPrefix: com.jobhuntos
+  deploymentTarget:
+    iOS: "17.0"
+    macOS: "14.0"
+packages:
+  JobHuntOSPackage:
+    path: .
+targets:
+  JobHuntOS-iOS:
+    type: application
+    platform: iOS
+    sources:
+      - Sources/JobHuntApp
+    dependencies:
+      - package: JobHuntOSPackage
+        product: JobHuntUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jobhuntos.app
+        INFOPLIST_KEY_CFBundleDisplayName: Job Hunt OS
+        INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking: true
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: true
+        GENERATE_INFOPLIST_FILE: true
+  JobHuntOS-macOS:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/JobHuntApp
+    dependencies:
+      - package: JobHuntOSPackage
+        product: JobHuntUI
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.jobhuntos.mac
+        INFOPLIST_KEY_CFBundleDisplayName: Job Hunt OS
+        GENERATE_INFOPLIST_FILE: true

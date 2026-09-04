@@ -129,7 +129,7 @@ jobRoutes.post("/:id/resume-versions", async (c) => {
   const profile = await ensureProfile();
   const job = await loadJob(c.req.param("id"));
   if (!job) return c.json({ error: "not found" }, 404);
-  const body = await c.req.json<{ status?: string }>().catch(() => ({}));
+  const body: { status?: string } = await c.req.json<{ status?: string }>().catch(() => ({}));
   const experience = await prisma.experienceItem.findMany({ where: { profileId: profile.id } });
   const skills = await prisma.skill.findMany({ where: { profileId: profile.id } });
   const accepted = job.suggestions.filter((suggestion) => suggestion.status === "accepted");

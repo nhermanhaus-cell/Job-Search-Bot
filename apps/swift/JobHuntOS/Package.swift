@@ -10,9 +10,11 @@ let package = Package(
     products: [
         .library(name: "JobHuntKit", targets: ["JobHuntKit"]),
         .library(name: "JobHuntUI", targets: ["JobHuntUI"]),
+        .executable(name: "JobHuntOSApp", targets: ["JobHuntApp"]),
     ],
     targets: [
         .target(name: "JobHuntKit"),
         .target(name: "JobHuntUI", dependencies: ["JobHuntKit"]),
+        .executableTarget(name: "JobHuntApp", dependencies: ["JobHuntUI"]),
     ]
 )
