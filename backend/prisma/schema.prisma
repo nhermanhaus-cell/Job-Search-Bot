@@ -8,15 +8,177 @@ datasource db {
 }
 
 model Profile {
-  id        String   @id @default("local")
-  name      String?
-  email     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String   @id @default("local")
+  name             String?
+  email            String?
+  location         String?
+  remotePreference String?
+  maxYearsRequired Int?
+  summary          String?
+  onboardingDone   Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
-  mailAccounts  MailAccount[]
-  applications  Application[]
-  mailEvents    MailEvent[]
+  mailAccounts      MailAccount[]
+  applications      Application[]
+  mailEvents        MailEvent[]
+  resumeDocuments   ResumeDocument[]
+  experienceItems   ExperienceItem[]
+  skills            Skill[]
+  titleInterests    TitleInterest[]
+  searchSessions    SearchSession[]
+  matches           Match[]
+  resumeVersions    ResumeVersion[]
+}
+
+model ResumeDocument {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  fileName    String
+  mediaType   String
+  rawText     String
+  parseJson   String
+  parseStatus String   @default("parsed")
+  uploadedAt  DateTime @default(now())
+}
+
+model ExperienceItem {
+  id                String   @id @default(cuid())
+  profileId         String
+  profile           Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  company           String
+  title             String
+  startDate         String?
+  endDate           String?
+  location          String?
+  bulletsJson       String   @default("[]")
+  sourceDocumentIds String   @default("[]")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([profileId, company])
+}
+
+model Skill {
+  id                String  @id @default(cuid())
+  profileId         String
+  profile           Profile @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  name              String
+  aliasesJson       String  @default("[]")
+  confidence        Float   @default(1)
+  sourceDocumentIds String  @default("[]")
+
+  @@unique([profileId, name])
+}
+
+model TitleInterest {
+  id        String   @id @default(cuid())
+  profileId String
+  profile   Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  title     String
+  reason    String?
+  pinned    Boolean  @default(true)
+  source    String   @default("user")
+  createdAt DateTime @default(now())
+
+  @@unique([profileId, title])
+}
+
+model SearchSession {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  query       String
+  location    String?
+  status      String   @default("queued")
+  sourceNames String   @default("[]")
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  sourceRuns  SearchSourceRun[]
+}
+
+model SearchSourceRun {
+  id         String        @id @default(cuid())
+  sessionId  String
+  session    SearchSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  source     String
+  status     String        @default("queued")
+  resultCount Int          @default(0)
+  error      String?
+  startedAt  DateTime?
+  completedAt DateTime?
+
+  @@unique([sessionId, source])
+}
+
+model Job {
+  id               String   @id @default(cuid())
+  fingerprint      String   @unique
+  provider         String
+  providerJobId    String
+  title            String
+  company          String
+  location         String?
+  remote           Boolean  @default(false)
+  description      String
+  listingUrl       String
+  salaryText       String?
+  postedAt         DateTime?
+  firstSeenAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  requirementsJson String   @default("{}")
+  sourcesJson      String   @default("[]")
+  matches          Match[]
+  suggestions      EditSuggestion[]
+  resumeVersions   ResumeVersion[]
+
+  @@unique([provider, providerJobId])
+  @@index([firstSeenAt])
+}
+
+model Match {
+  id             String   @id @default(cuid())
+  profileId      String
+  profile        Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  jobId          String
+  job            Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  score          Int
+  difficulty     String
+  explanation    String
+  breakdownJson  String
+  hiddenMisses   String   @default("[]")
+  userDifficulty String?
+  hidden         Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([profileId, jobId])
+  @@index([profileId, difficulty])
+}
+
+model EditSuggestion {
+  id         String   @id @default(cuid())
+  jobId      String
+  job        Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  kind       String
+  section    String
+  beforeText String?
+  afterText  String
+  rationale  String
+  status     String   @default("pending")
+  createdAt  DateTime @default(now())
+}
+
+model ResumeVersion {
+  id          String   @id @default(cuid())
+  profileId   String
+  profile     Profile  @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  jobId       String?
+  job         Job?     @relation(fields: [jobId], references: [id], onDelete: SetNull)
+  contentJson String
+  status      String   @default("draft")
+  createdAt   DateTime @default(now())
 }
 
 model MailAccount {

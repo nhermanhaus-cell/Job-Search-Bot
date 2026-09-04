@@ -33,6 +33,10 @@ export const env = {
   googleClientId: optional("GOOGLE_OAUTH_CLIENT_ID"),
   googleClientSecret: optional("GOOGLE_OAUTH_CLIENT_SECRET"),
   tokenKey: optional("MAIL_TOKEN_ENCRYPTION_KEY", "dev-only-change-me-32-chars!!!!"),
+  adzunaAppId: optional("ADZUNA_APP_ID"),
+  adzunaAppKey: optional("ADZUNA_APP_KEY"),
+  usajobsApiKey: optional("USAJOBS_API_KEY"),
+  usajobsEmail: optional("USAJOBS_EMAIL"),
 };
 
 export const googleRedirectUri = `${env.publicUrl.replace(/\/$/, "")}/api/mail/google/callback`;
