@@ -50,6 +50,19 @@ npm run dev
 
 In another terminal: `npm run dev:worker` (needed for resume parsing).
 
-Job-source keys also go in `backend/.env` (Adzuna, USAJOBS, JSearch/RapidAPI, Jooble). Greenhouse/Lever/Ashby take company board slugs, not keys. Remotive, Remote OK, and demo need nothing. Restart `npm run dev` after changing `.env`; the Mac Settings toggles stay disabled until the API process has those values.
+Job-source keys go in the **hidden** file `backend/.env` (not in Xcode). Open it with:
+
+```bash
+open -e ~/Job-Search-Bot/backend/.env
+```
+
+If that says the file does not exist:
+
+```bash
+cp ~/Job-Search-Bot/backend/.env.example ~/Job-Search-Bot/backend/.env
+open -e ~/Job-Search-Bot/backend/.env
+```
+
+Or double-click `Edit-backend-env.command` at the repo root. After saving, restart `npm run dev`. Remotive, Remote OK, and demo need no keys. Greenhouse/Lever/Ashby use company board slugs, not API keys.
 
 Swift app: [apps/swift/JobHuntOS](apps/swift/JobHuntOS). On a Mac, double-click `apps/swift/JobHuntOS/Open-in-Xcode.command`, or `open apps/swift/JobHuntOS/Package.swift` and run the **JobHuntOSApp** scheme on **My Mac**.
