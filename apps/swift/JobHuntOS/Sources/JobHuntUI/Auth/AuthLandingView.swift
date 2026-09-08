@@ -78,10 +78,22 @@ public struct AuthLandingView: View {
         guestError = nil
         do {
             try await store.continueAsGuest()
+        } catch let url as URLError {
+            guestError = unreachableBackendMessage(url)
         } catch {
             guestError = error.localizedDescription
         }
         guestWorking = false
+    }
+
+    private func unreachableBackendMessage(_ error: URLError) -> String {
+        switch error.code {
+        case .cannotConnectToHost, .cannotFindHost, .networkConnectionLost, .timedOut,
+             .notConnectedToInternet, .dnsLookupFailed:
+            return "Couldn't reach the backend at \(store.backendURL.absoluteString). In backend/, run npm run dev (Postgres required)."
+        default:
+            return error.localizedDescription
+        }
     }
 }
 
