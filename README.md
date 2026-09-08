@@ -18,20 +18,23 @@ Planning background: [docs/PLAN.md](docs/PLAN.md).
 
 Gmail `readonly` stays feature-flagged until Google verification/CASA completes. The app never scrapes LinkedIn/Indeed or auto-submits applications.
 
-## Run the backend
+## Run locally (Mac)
 
-Postgres is required:
+1. Double-click **`Start-backend.command`** (needs Node 20+ and Docker Desktop, or Homebrew Postgres). Leave that Terminal window open until you see the API on `http://localhost:3000`.
+2. In Xcode, run **JobHuntOSApp** on **My Mac**, then tap **Continue without an account**.
+
+Manual equivalent:
 
 ```bash
+docker compose up -d
 cd backend
-cp .env.example .env
+cp -n .env.example .env
 npm install
 npx prisma generate
 npx prisma migrate deploy
-npm test
 npm run dev
 ```
 
-In another terminal: `npm run dev:worker`.
+In another terminal: `npm run dev:worker` (needed for resume parsing).
 
 Swift app: [apps/swift/JobHuntOS](apps/swift/JobHuntOS). On a Mac, double-click `apps/swift/JobHuntOS/Open-in-Xcode.command`, or `open apps/swift/JobHuntOS/Package.swift` and run the **JobHuntOSApp** scheme on **My Mac**.

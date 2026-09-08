@@ -42,11 +42,17 @@ Xcode will ask for your Personal Team. Use Automatic signing. Enable **Sign in w
 
 ## Backend (for data, not for viewing UI)
 
+Double-click **`Start-backend.command`** at the repo root, or:
+
 ```bash
+# from the repo root
+docker compose up -d
 cd backend
-cp .env.example .env
+cp -n .env.example .env
 npm install
 npx prisma generate
 npx prisma migrate deploy
 npm run dev
 ```
+
+Keep that process running, then tap **Continue without an account** in the Mac app.

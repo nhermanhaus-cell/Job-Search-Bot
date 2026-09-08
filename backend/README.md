@@ -4,12 +4,13 @@ Hono + Prisma + PostgreSQL. Multi-user system of record for Apple/Google auth, e
 
 ## Run locally
 
-Postgres is required (SQLite is no longer used):
+Postgres is required (SQLite is no longer used). On a Mac, double-click `Start-backend.command` at the repo root.
 
 ```bash
-createdb jobhunt
+# from the repo root
+docker compose up -d   # Postgres user/password/db: jobhunt
 cd backend
-cp .env.example .env
+cp -n .env.example .env
 npm install
 npx prisma generate
 npx prisma migrate deploy
