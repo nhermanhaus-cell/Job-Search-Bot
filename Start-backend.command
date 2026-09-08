@@ -18,11 +18,26 @@ node_major() {
 
 ensure_node() {
   export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+
+  # Volta shims often sit first on PATH and pin an old Node (16 on LinkedIn Macs).
+  if command -v volta >/dev/null 2>&1; then
+    volta install node@22 >/dev/null
+  fi
+  local nvm22
+  nvm22=(${NVM_DIR}/versions/node/v22.*/bin(N[-1]))
+  if [[ -n "${nvm22:-}" ]]; then
+    export PATH="${nvm22}:$PATH"
+  fi
+
   if [[ -s "$NVM_DIR/nvm.sh" ]]; then
     # shellcheck disable=SC1090
     . "$NVM_DIR/nvm.sh"
     nvm install 22 >/dev/null
     nvm use 22
+    nvm22=(${NVM_DIR}/versions/node/v22.*/bin(N[-1]))
+    if [[ -n "${nvm22:-}" ]]; then
+      export PATH="${nvm22}:$PATH"
+    fi
   fi
 
   if command -v brew >/dev/null 2>&1; then
@@ -44,9 +59,11 @@ ensure_node() {
   fi
 
   if [[ "$(node_major)" -lt 20 ]]; then
-    need "Still on Node $(node -v). Open a new Terminal and run: brew install node
-If you use nvm: nvm install 22 && nvm use 22
-Then run Start-backend.command again. Do not answer yes to prisma@8 prompts."
+    need "Still on Node $(node -v) from $(command -v node).
+Volta or an old PATH entry is hiding Node 22. Run:
+  export PATH=\"\$HOME/.nvm/versions/node/v22.23.2/bin:\$PATH\"
+Then check: which node && node -v
+Do not answer yes to prisma@8 prompts."
   fi
 
   echo "Using Node $(node -v) from $(command -v node)"
