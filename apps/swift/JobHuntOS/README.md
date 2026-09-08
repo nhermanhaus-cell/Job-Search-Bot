@@ -30,7 +30,7 @@ xcodegen generate
 open JobHuntOS.xcodeproj
 ```
 
-The first screen is the showcase landing (Get Started / Log In). You do not need the backend to *see* that UI. Sign-in, hunt, and resume upload need the API at `http://localhost:3000` in Debug.
+The first screen is the showcase landing. Tap **Continue without an account** to skip Apple/Google. You do not need the backend to *see* that UI, but guest mode, hunt, and resume upload need the API at `http://localhost:3000` in Debug.
 
 ## SwiftUI Previews
 

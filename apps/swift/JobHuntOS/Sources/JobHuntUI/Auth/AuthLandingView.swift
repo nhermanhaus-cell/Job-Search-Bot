@@ -5,6 +5,8 @@ public struct AuthLandingView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showSignup = false
     @State private var showLogin = false
+    @State private var guestWorking = false
+    @State private var guestError: String?
 
     public init() {}
 
@@ -14,12 +16,38 @@ public struct AuthLandingView: View {
                 VStack(spacing: 28) {
                     ShowcaseCarousel()
                     VStack(spacing: 12) {
+                        Button {
+                            Task { await continueAsGuest() }
+                        } label: {
+                            if guestWorking {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity)
+                            } else {
+                                Text("Continue without an account")
+                                    .frame(maxWidth: .infinity)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.large)
+                        .disabled(guestWorking)
+                        Text("Skip Apple and Google for now. Your hunt is stored on the backend as a guest profile.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                        if let guestError {
+                            Text(guestError)
+                                .font(.footnote)
+                                .foregroundStyle(.red)
+                                .multilineTextAlignment(.center)
+                        }
                         Button("Get Started") { showSignup = true }
-                            .buttonStyle(.borderedProminent)
+                            .buttonStyle(.bordered)
                             .controlSize(.large)
+                            .disabled(guestWorking)
                         Button("Log In") { showLogin = true }
                             .buttonStyle(.bordered)
                             .controlSize(.large)
+                            .disabled(guestWorking)
                     }
                     Text("By continuing you agree to encrypted resume storage, optional OpenAI fact extraction, and the privacy policy. Gmail is opt-in later.")
                         .font(.footnote)
@@ -43,6 +71,17 @@ public struct AuthLandingView: View {
                     .environmentObject(store)
             }
         }
+    }
+
+    private func continueAsGuest() async {
+        guestWorking = true
+        guestError = nil
+        do {
+            try await store.continueAsGuest()
+        } catch {
+            guestError = error.localizedDescription
+        }
+        guestWorking = false
     }
 }
 

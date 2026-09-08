@@ -162,6 +162,16 @@ public actor APIClient {
         )
     }
 
+    public func continueAsGuest() async throws -> AuthSession {
+        struct Empty: Encodable {}
+        let envelope: AuthSessionEnvelope = try await publicJSONRequest(
+            "/api/auth/guest",
+            body: Empty()
+        )
+        try await sessionStore.save(envelope.session)
+        return envelope.session
+    }
+
     public func exchangeIdentity(
         provider: AuthProvider,
         challengeId: String,

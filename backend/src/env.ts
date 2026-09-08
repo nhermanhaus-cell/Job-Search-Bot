@@ -22,6 +22,7 @@ function optional(name: string, fallback = ""): string {
 }
 
 const root = resolve(import.meta.dirname, "..");
+const nodeEnv = optional("NODE_ENV", "development");
 
 export const env = {
   port: Number(optional("PORT", "3000")),
@@ -43,7 +44,7 @@ export const env = {
   leverSites: optional("LEVER_SITES"),
   ashbyBoards: optional("ASHBY_BOARDS"),
   jobRefreshMs: Number(optional("JOB_REFRESH_MS", String(4 * 60 * 60 * 1000))),
-  nodeEnv: optional("NODE_ENV", "development"),
+  nodeEnv,
   authJwtSecret: optional("AUTH_JWT_SECRET", "dev-only-auth-secret-change-me"),
   authIssuer: optional("AUTH_ISSUER", "job-hunt-os"),
   appleClientIds: optional("APPLE_CLIENT_IDS", "com.jobhuntos.app,com.jobhuntos.mac")
@@ -70,6 +71,7 @@ export const env = {
     .map((value) => value.trim())
     .filter(Boolean),
   gmailPublicEnabled: optional("GMAIL_PUBLIC_ENABLED", "false") === "true",
+  allowGuestAuth: optional("ALLOW_GUEST_AUTH", nodeEnv === "production" ? "false" : "true") === "true",
 };
 
 export const googleRedirectUri = `${env.publicUrl.replace(/\/$/, "")}/api/mail/google/callback`;

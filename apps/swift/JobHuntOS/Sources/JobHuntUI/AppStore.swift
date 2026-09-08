@@ -64,6 +64,12 @@ public final class AppStore: ObservableObject {
         }
     }
 
+    public func continueAsGuest() async throws {
+        let session = try await client.continueAsGuest()
+        apply(session: session)
+        await refresh()
+    }
+
     public func authenticate(provider: AuthProvider, intent: AuthIntent) async throws {
         let challenge = try await client.authChallenge(provider: provider, intent: intent)
         let identityToken: String

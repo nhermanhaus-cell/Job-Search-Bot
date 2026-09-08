@@ -170,8 +170,14 @@ public struct SettingsView: View {
     private var accountSection: some View {
         Section("Account") {
             if let user = store.session?.user {
-                LabeledContent("Signed in", value: user.email ?? user.name ?? user.id)
-                LabeledContent("Providers", value: user.providers.joined(separator: ", "))
+                LabeledContent(
+                    "Signed in",
+                    value: user.email ?? user.name ?? (user.providers.isEmpty ? "Guest" : user.id)
+                )
+                LabeledContent(
+                    "Providers",
+                    value: user.providers.isEmpty ? "None yet" : user.providers.joined(separator: ", ")
+                )
             }
             if !(store.session?.user.providers.contains("apple") ?? false) {
                 Button("Link Apple") {

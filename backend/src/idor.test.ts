@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { app } from "./app.js";
+import { prisma } from "./db.js";
 
 describe("unauthenticated IDOR surface", () => {
   it("rejects personal routes without a bearer token", async () => {
@@ -23,5 +24,26 @@ describe("unauthenticated IDOR surface", () => {
     expect((await app.request("/api/health/live")).status).toBe(200);
     expect((await app.request("/privacy")).status).toBe(200);
     expect((await app.request("/terms")).status).toBe(200);
+  });
+
+  it("creates a guest session when guest auth is enabled", async () => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch {
+      return;
+    }
+    const response = await app.request("/api/auth/guest", { method: "POST" });
+    expect(response.status).toBe(201);
+    const body = (await response.json()) as {
+      session: { accessToken: string; user: { providers: string[] }; onboardingDone: boolean };
+    };
+    expect(body.session.accessToken).toBeTruthy();
+    expect(body.session.user.providers).toEqual([]);
+    expect(body.session.onboardingDone).toBe(false);
+
+    const profile = await app.request("/api/profile", {
+      headers: { Authorization: `Bearer ${body.session.accessToken}` },
+    });
+    expect(profile.status).toBe(200);
   });
 });

@@ -24,13 +24,14 @@ Open http://localhost:3000/api/health/live. Privacy and terms are at `/privacy` 
 
 Native apps call:
 
+- `POST /api/auth/guest` — create a guest user + session (enabled by default when `NODE_ENV` is not production; set `ALLOW_GUEST_AUTH=true` to force it on)
 - `POST /api/auth/challenge` — one-use nonce
 - `POST /api/auth/exchange/apple|google` — signup, login, or authenticated link
 - `POST /api/auth/refresh` — rotating refresh tokens (reuse revokes the family)
 - `GET /api/auth/session`, `POST /api/auth/logout`
 - `GET /api/auth/export`, `DELETE /api/auth/account`
 
-Login never creates an account. Apple and Google are not auto-linked by email.
+Login never creates an account. Apple and Google are not auto-linked by email. Guest profiles can link Apple or Google later from Settings.
 
 ## Storage
 

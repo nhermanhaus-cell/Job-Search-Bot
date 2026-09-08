@@ -1,6 +1,6 @@
 # Job Hunt OS
 
-Backend-powered job hunt with a multiplatform SwiftUI client. Sign in with Apple or Google, upload resumes, choose role interests, watch licensed sources load independently, inspect hidden requirements, tailor a grounded resume, apply yourself, and optionally track the pipeline through Gmail.
+Backend-powered job hunt with a multiplatform SwiftUI client. Continue as a guest, or sign in with Apple or Google later. Upload resumes, choose role interests, watch licensed sources load independently, inspect hidden requirements, tailor a grounded resume, apply yourself, and optionally track the pipeline through Gmail.
 
 Planning background: [docs/PLAN.md](docs/PLAN.md).
 
@@ -8,7 +8,7 @@ Planning background: [docs/PLAN.md](docs/PLAN.md).
 
 | Layer | Choice |
 |---|---|
-| Identity | Sign in with Apple + Google ID tokens, rotating refresh sessions |
+| Identity | Guest sessions locally; Apple + Google ID tokens when you enable them |
 | API | Hono on Fly (`web`) |
 | Worker | Singleton Fly process with encrypted `/data` volume for temp parse files |
 | Database | Fly Managed Postgres |

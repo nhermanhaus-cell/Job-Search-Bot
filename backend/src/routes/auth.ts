@@ -12,15 +12,32 @@ import {
   rotateSession,
 } from "../auth/tokens.js";
 import { enqueue } from "../queue/index.js";
+import { env } from "../env.js";
 
 export const authRoutes = new Hono<APIEnv>();
 
 authRoutes.use("*", async (c, next) => {
-  const ip = clientIp({ get: (name) => c.req.header(name) });
-  if (!rateLimit(`${ip}:${c.req.path}`, 30, 60_000)) {
+  const ip = clientIp(c);
+  if (!rateLimit(`auth:${ip}`, 80, 60_000)) {
     return c.json({ error: "rate_limited" }, 429);
   }
   await next();
+});
+
+authRoutes.post("/guest", async (c) => {
+  if (!env.allowGuestAuth) {
+    return c.json({ error: "guest_auth_disabled" }, 403);
+  }
+  const user = await prisma.user.create({
+    data: { profile: { create: {} } },
+    include: { profile: true },
+  });
+  if (!user.profile) return c.json({ error: "profile_missing" }, 500);
+  const session = await createSession(user.id, user.profile.id, {
+    userAgent: c.req.header("User-Agent"),
+    ipAddress: c.req.header("Fly-Client-IP") ?? c.req.header("X-Forwarded-For"),
+  });
+  return c.json({ session }, 201);
 });
 
 authRoutes.post("/challenge", async (c) => {

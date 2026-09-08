@@ -8,6 +8,7 @@ import { encryptSecret, decryptSecret } from "../crypto.js";
 describe("auth helpers", () => {
   it("allows only documented public API paths", () => {
     expect(isPublicAPIPath("/api/auth/challenge")).toBe(true);
+    expect(isPublicAPIPath("/api/auth/guest")).toBe(true);
     expect(isPublicAPIPath("/api/auth/refresh")).toBe(true);
     expect(isPublicAPIPath("/api/health/ready")).toBe(true);
     expect(isPublicAPIPath("/api/mail/google/callback")).toBe(true);
