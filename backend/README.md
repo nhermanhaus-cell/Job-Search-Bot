@@ -1,0 +1,48 @@
+# Job Hunt OS backend
+
+Hono + Prisma + PostgreSQL. Multi-user system of record for Apple/Google auth, encrypted resume objects, provider search, matching/tailoring, application charts, and optional Gmail classification.
+
+## Run locally
+
+Postgres is required (SQLite is no longer used). Node **20+** is required (22 LTS recommended). On a Mac, double-click `Start-backend.command` at the repo root.
+
+```bash
+brew install node postgresql@16
+brew services start postgresql@16
+export PATH="$(brew --prefix node)/bin:$(brew --prefix postgresql@16)/bin:$PATH"
+
+cd backend
+cp -n .env.example .env
+rm -rf node_modules
+npm install
+npx prisma generate
+npx prisma migrate deploy
+npm test
+npm run dev
+npm run dev:worker
+```
+
+Open http://localhost:3000/api/health/live. Privacy and terms are at `/privacy` and `/terms`. The HTML dashboard is hidden when `NODE_ENV=production`.
+
+## Auth
+
+Native apps call:
+
+- `POST /api/auth/guest` — create a guest user + session (enabled by default when `NODE_ENV` is not production; set `ALLOW_GUEST_AUTH=true` to force it on)
+- `POST /api/auth/challenge` — one-use nonce
+- `POST /api/auth/exchange/apple|google` — signup, login, or authenticated link
+- `POST /api/auth/refresh` — rotating refresh tokens (reuse revokes the family)
+- `GET /api/auth/session`, `POST /api/auth/logout`
+- `GET /api/auth/export`, `DELETE /api/auth/account`
+
+Login never creates an account. Apple and Google are not auto-linked by email. Guest profiles can link Apple or Google later from Settings.
+
+## Storage
+
+Resumes and generated PDF packets are envelope-encrypted (AES-256-GCM data key wrapped by `OBJECT_ENCRYPTION_KEY`) and stored in Tigris in production, or `.data/objects` locally. `rawText` is not persisted. Account deletion crypto-shreds wrapped keys, then deletes the user prefix.
+
+## Fly
+
+See [fly.toml](../fly.toml): `web` is a stateless API; `worker` is a singleton with encrypted volume `jobhunt_worker_data` at `/data`. Secrets belong in `fly secrets`, never files.
+
+Gmail tracking is off in production until `GMAIL_PUBLIC_ENABLED=true` after Google restricted-scope verification.

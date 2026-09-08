@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "Profile" ADD COLUMN "greenhouseBoards" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Profile" ADD COLUMN "leverSites" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Profile" ADD COLUMN "ashbyBoards" TEXT NOT NULL DEFAULT '';
