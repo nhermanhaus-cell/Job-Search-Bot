@@ -1,4 +1,5 @@
 import { env } from "../env.js";
+import { mergeBoardLists } from "./atsBoards.js";
 import type { ProviderJob, SearchQuery } from "./types.js";
 
 export type Provider = {
@@ -318,18 +319,18 @@ const jooble: Provider = {
   },
 };
 
-function slugs(value: string): string[] {
-  return value.split(",").map((item) => item.trim()).filter(Boolean);
-}
-
 const greenhouse: Provider = {
   name: "greenhouse",
-  configured: () => slugs(env.greenhouseBoards).length > 0,
-  missingReason: "Set GREENHOUSE_BOARDS to comma-separated company board slugs",
-  search: async ({ query }) => {
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  configured: () => true,
+  missingReason: "Add Greenhouse board URLs or slugs in Settings",
+  search: async (query) => {
+    const boards = query.greenhouseBoards?.length
+      ? query.greenhouseBoards
+      : mergeBoardLists(env.greenhouseBoards);
+    if (!boards.length) return [];
+    const terms = query.query.toLowerCase().split(/\s+/).filter(Boolean);
     const batches = await Promise.all(
-      slugs(env.greenhouseBoards).map(async (board) => {
+      boards.map(async (board) => {
         const response = await fetch(
           `https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(board)}/jobs?content=true`,
           { signal: AbortSignal.timeout(15_000) },
@@ -366,12 +367,14 @@ const greenhouse: Provider = {
 
 const lever: Provider = {
   name: "lever",
-  configured: () => slugs(env.leverSites).length > 0,
-  missingReason: "Set LEVER_SITES to comma-separated company site slugs",
-  search: async ({ query }) => {
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  configured: () => true,
+  missingReason: "Add Lever careers URLs or slugs in Settings",
+  search: async (query) => {
+    const sites = query.leverSites?.length ? query.leverSites : mergeBoardLists(env.leverSites);
+    if (!sites.length) return [];
+    const terms = query.query.toLowerCase().split(/\s+/).filter(Boolean);
     const batches = await Promise.all(
-      slugs(env.leverSites).map(async (site) => {
+      sites.map(async (site) => {
         const response = await fetch(
           `https://api.lever.co/v0/postings/${encodeURIComponent(site)}?mode=json`,
           { signal: AbortSignal.timeout(15_000) },
@@ -406,12 +409,14 @@ const lever: Provider = {
 
 const ashby: Provider = {
   name: "ashby",
-  configured: () => slugs(env.ashbyBoards).length > 0,
-  missingReason: "Set ASHBY_BOARDS to comma-separated company board slugs",
-  search: async ({ query }) => {
-    const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
+  configured: () => true,
+  missingReason: "Add Ashby careers URLs or slugs in Settings",
+  search: async (query) => {
+    const boards = query.ashbyBoards?.length ? query.ashbyBoards : mergeBoardLists(env.ashbyBoards);
+    if (!boards.length) return [];
+    const terms = query.query.toLowerCase().split(/\s+/).filter(Boolean);
     const batches = await Promise.all(
-      slugs(env.ashbyBoards).map(async (board) => {
+      boards.map(async (board) => {
         const response = await fetch(
           `https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(board)}?includeCompensation=true`,
           { signal: AbortSignal.timeout(15_000) },

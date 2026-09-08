@@ -157,6 +157,9 @@ public struct SourceInfo: Codable, Identifiable, Sendable {
 public struct ServerSettings: Codable, Sendable {
     public var enabledSources: [String]
     public var mailPollMinutes: Int
+    public var greenhouseBoards: String?
+    public var leverSites: String?
+    public var ashbyBoards: String?
     public var sources: [SettingsSource]
     public var secrets: SecretStatus
 }

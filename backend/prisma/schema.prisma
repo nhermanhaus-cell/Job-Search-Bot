@@ -81,6 +81,9 @@ model Profile {
   maxYearsRequired   Int?
   summary            String?
   enabledSourcesJson String   @default("[\"demo\",\"remotive\",\"remoteok\"]")
+  greenhouseBoards   String   @default("")
+  leverSites         String   @default("")
+  ashbyBoards        String   @default("")
   mailPollMinutes    Int      @default(15)
   onboardingDone     Boolean  @default(false)
   createdAt          DateTime @default(now())

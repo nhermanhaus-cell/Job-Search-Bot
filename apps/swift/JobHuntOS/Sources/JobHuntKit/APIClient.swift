@@ -629,11 +629,17 @@ public actor APIClient {
 
     public func updateServerSettings(
         enabledSources: [String],
-        mailPollMinutes: Int
+        mailPollMinutes: Int,
+        greenhouseBoards: String? = nil,
+        leverSites: String? = nil,
+        ashbyBoards: String? = nil
     ) async throws {
         struct Body: Encodable {
             var enabledSources: [String]
             var mailPollMinutes: Int
+            var greenhouseBoards: String?
+            var leverSites: String?
+            var ashbyBoards: String?
         }
         struct Response: Decodable {
             var enabledSources: [String]
@@ -642,7 +648,13 @@ public actor APIClient {
         let _: Response = try await jsonRequest(
             "/api/settings",
             method: "PATCH",
-            body: Body(enabledSources: enabledSources, mailPollMinutes: mailPollMinutes)
+            body: Body(
+                enabledSources: enabledSources,
+                mailPollMinutes: mailPollMinutes,
+                greenhouseBoards: greenhouseBoards,
+                leverSites: leverSites,
+                ashbyBoards: ashbyBoards
+            )
         )
     }
 

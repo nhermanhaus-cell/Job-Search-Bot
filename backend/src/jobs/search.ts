@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { prisma } from "../db.js";
 import { deepReadJob, scoreJob } from "./match.js";
+import { mergeBoardLists } from "./atsBoards.js";
+import { env } from "../env.js";
 import { defaultProviderNames, providers } from "./providers.js";
 import type { ProviderJob, SearchEvent, SearchQuery } from "./types.js";
 
@@ -32,11 +34,18 @@ export async function createSearchSession(
   query: SearchQuery,
   sourceNames = defaultProviderNames,
 ) {
+  const profile = await prisma.profile.findUniqueOrThrow({ where: { id: profileId } });
+  const hydrated: SearchQuery = {
+    ...query,
+    greenhouseBoards: mergeBoardLists(env.greenhouseBoards, profile.greenhouseBoards, join(query.greenhouseBoards)),
+    leverSites: mergeBoardLists(env.leverSites, profile.leverSites, join(query.leverSites)),
+    ashbyBoards: mergeBoardLists(env.ashbyBoards, profile.ashbyBoards, join(query.ashbyBoards)),
+  };
   const session = await prisma.searchSession.create({
     data: {
       profileId,
-      query: query.query,
-      location: query.location,
+      query: hydrated.query,
+      location: hydrated.location,
       sourceNames: JSON.stringify(sourceNames),
       sourceRuns: {
         create: sourceNames.map((source) => ({ source })),
@@ -45,12 +54,34 @@ export async function createSearchSession(
   });
   feeds.set(session.id, { events: [], emitter: new EventEmitter(), done: false });
   setTimeout(() => {
-    runSearch(session.id, profileId, query, sourceNames).catch((error) => {
+    runSearch(session.id, profileId, hydrated, sourceNames).catch((error) => {
       console.error("search session failed", error);
       emit(session.id, { type: "session_done", sessionId: session.id });
     });
   }, 0);
   return session;
+}
+
+function join(values?: string[]) {
+  return values?.join(",") ?? "";
+}
+
+function sourceReady(sourceName: string, query: SearchQuery) {
+  const provider = providers.get(sourceName);
+  if (!provider) return { ok: false as const, reason: "Unknown provider" };
+  if (sourceName === "greenhouse" && !query.greenhouseBoards?.length) {
+    return { ok: false as const, reason: provider.missingReason || "No Greenhouse boards" };
+  }
+  if (sourceName === "lever" && !query.leverSites?.length) {
+    return { ok: false as const, reason: provider.missingReason || "No Lever sites" };
+  }
+  if (sourceName === "ashby" && !query.ashbyBoards?.length) {
+    return { ok: false as const, reason: provider.missingReason || "No Ashby boards" };
+  }
+  if (!provider.configured()) {
+    return { ok: false as const, reason: provider.missingReason || "Not configured" };
+  }
+  return { ok: true as const, provider };
 }
 
 async function runSearch(
@@ -62,23 +93,20 @@ async function runSearch(
   await prisma.searchSession.update({ where: { id: sessionId }, data: { status: "running" } });
   await Promise.all(
     sourceNames.map(async (sourceName) => {
-      const provider = providers.get(sourceName);
-      if (!provider) {
-        emit(sessionId, { type: "source_error", source: sourceName, error: "Unknown provider" });
-        return;
-      }
-      if (!provider.configured()) {
+      const ready = sourceReady(sourceName, query);
+      if (!ready.ok) {
         await prisma.searchSourceRun.update({
           where: { sessionId_source: { sessionId, source: sourceName } },
-          data: { status: "needs_key", error: provider.missingReason, completedAt: new Date() },
+          data: { status: "needs_key", error: ready.reason, completedAt: new Date() },
         });
         emit(sessionId, {
           type: "source_skipped",
           source: sourceName,
-          reason: provider.missingReason || "Not configured",
+          reason: ready.reason,
         });
         return;
       }
+      const provider = ready.provider;
       emit(sessionId, { type: "source_started", source: sourceName });
       await prisma.searchSourceRun.update({
         where: { sessionId_source: { sessionId, source: sourceName } },

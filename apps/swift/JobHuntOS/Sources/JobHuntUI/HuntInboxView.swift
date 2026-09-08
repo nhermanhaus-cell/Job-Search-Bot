@@ -61,7 +61,9 @@ public struct HuntInboxView: View {
                             VStack(alignment: .leading) {
                                 Text(source.name)
                                 if !source.configured {
-                                    Text("Needs API key").font(.caption).foregroundStyle(.orange)
+                                    Text(source.missingReason ?? "Not configured yet")
+                                        .font(.caption)
+                                        .foregroundStyle(.orange)
                                 }
                             }
                         }

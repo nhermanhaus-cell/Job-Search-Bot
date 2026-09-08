@@ -10,6 +10,9 @@ public struct SettingsView: View {
     #endif
     @State private var maxYears = 6
     @State private var enabledSources = Set<String>()
+    @State private var greenhouseBoards = ""
+    @State private var leverSites = ""
+    @State private var ashbyBoards = ""
     @State private var mailPollMinutes = 15
     @State private var confirmDelete = false
     @State private var working = false
@@ -110,7 +113,31 @@ public struct SettingsView: View {
                         Task {
                             try? await store.client.updateServerSettings(
                                 enabledSources: Array(enabledSources),
-                                mailPollMinutes: mailPollMinutes
+                                mailPollMinutes: mailPollMinutes,
+                                greenhouseBoards: greenhouseBoards,
+                                leverSites: leverSites,
+                                ashbyBoards: ashbyBoards
+                            )
+                            await store.refresh()
+                        }
+                    }
+                }
+
+                Section("Company boards") {
+                    Text("Paste careers URLs or the slug after the domain, comma-separated. Example: boards.greenhouse.io/stripe → stripe")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    TextField("Greenhouse (stripe, airbnb, figma)", text: $greenhouseBoards, axis: .vertical)
+                    TextField("Lever (palantir, spotify)", text: $leverSites, axis: .vertical)
+                    TextField("Ashby (openai, notion, cursor)", text: $ashbyBoards, axis: .vertical)
+                    Button("Save company boards") {
+                        Task {
+                            try? await store.client.updateServerSettings(
+                                enabledSources: Array(enabledSources),
+                                mailPollMinutes: mailPollMinutes,
+                                greenhouseBoards: greenhouseBoards,
+                                leverSites: leverSites,
+                                ashbyBoards: ashbyBoards
                             )
                             await store.refresh()
                         }
@@ -151,6 +178,9 @@ public struct SettingsView: View {
                         ?? store.sources.filter(\.configured).map(\.id)
                 )
                 mailPollMinutes = store.serverSettings?.mailPollMinutes ?? 15
+                greenhouseBoards = store.serverSettings?.greenhouseBoards ?? ""
+                leverSites = store.serverSettings?.leverSites ?? ""
+                ashbyBoards = store.serverSettings?.ashbyBoards ?? ""
             }
             .alert("Delete your account?", isPresented: $confirmDelete) {
                 Button("Delete everything", role: .destructive) {

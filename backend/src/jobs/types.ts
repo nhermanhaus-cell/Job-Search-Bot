@@ -2,6 +2,9 @@ export type SearchQuery = {
   query: string;
   location?: string | null;
   remote?: boolean;
+  greenhouseBoards?: string[];
+  leverSites?: string[];
+  ashbyBoards?: string[];
 };
 
 export type ProviderJob = {
