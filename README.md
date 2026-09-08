@@ -20,20 +20,33 @@ Gmail `readonly` stays feature-flagged until Google verification/CASA completes.
 
 ## Run locally (Mac)
 
-1. Double-click **`Start-backend.command`** (needs Node 20+ and Docker Desktop, or Homebrew Postgres). Leave that Terminal window open until you see the API on `http://localhost:3000`.
+Needs **Node 22** (this repo will not run on Node 16) and **Postgres**. Docker is optional.
+
+1. Double-click **`Start-backend.command`**. It installs Node/Postgres with Homebrew if needed. Leave the Terminal window open until you see the API on `http://localhost:3000`.
 2. In Xcode, run **JobHuntOSApp** on **My Mac**, then tap **Continue without an account**.
 
-Manual equivalent:
+If the command file is not handy:
 
 ```bash
-docker compose up -d
-cd backend
+brew install node postgresql@16
+brew services start postgresql@16
+export PATH="$(brew --prefix node)/bin:$(brew --prefix postgresql@16)/bin:$PATH"
+node -v
+
+createuser jobhunt
+createdb -O jobhunt jobhunt
+psql -d postgres -c "ALTER USER jobhunt WITH PASSWORD 'jobhunt'"
+
+cd ~/Job-Search-Bot/backend
+rm -rf node_modules
 cp -n .env.example .env
 npm install
 npx prisma generate
 npx prisma migrate deploy
 npm run dev
 ```
+
+`createuser` / `createdb` may already exist; that is fine. Do not accept an `npx` prompt for Prisma 8.
 
 In another terminal: `npm run dev:worker` (needed for resume parsing).
 

@@ -4,19 +4,22 @@ Hono + Prisma + PostgreSQL. Multi-user system of record for Apple/Google auth, e
 
 ## Run locally
 
-Postgres is required (SQLite is no longer used). On a Mac, double-click `Start-backend.command` at the repo root.
+Postgres is required (SQLite is no longer used). Node **20+** is required (22 LTS recommended). On a Mac, double-click `Start-backend.command` at the repo root.
 
 ```bash
-# from the repo root
-docker compose up -d   # Postgres user/password/db: jobhunt
+brew install node postgresql@16
+brew services start postgresql@16
+export PATH="$(brew --prefix node)/bin:$(brew --prefix postgresql@16)/bin:$PATH"
+
 cd backend
 cp -n .env.example .env
+rm -rf node_modules
 npm install
 npx prisma generate
 npx prisma migrate deploy
 npm test
-npm run dev          # web API
-npm run dev:worker   # parse / mail / deletion queue
+npm run dev
+npm run dev:worker
 ```
 
 Open http://localhost:3000/api/health/live. Privacy and terms are at `/privacy` and `/terms`. The HTML dashboard is hidden when `NODE_ENV=production`.

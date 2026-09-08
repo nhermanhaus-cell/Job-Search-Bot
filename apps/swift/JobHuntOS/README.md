@@ -42,7 +42,7 @@ Xcode will ask for your Personal Team. Use Automatic signing. Enable **Sign in w
 
 ## Backend (for data, not for viewing UI)
 
-Double-click **`Start-backend.command`** at the repo root, or:
+Double-click **`Start-backend.command`** at the repo root (installs Node 22 and Homebrew Postgres if needed). Or:
 
 ```bash
 # from the repo root
